@@ -1,0 +1,14 @@
+<launch>
+    <!-- Posix SITL MAVROS integration tests -->
+
+    <arg name="ns" default="/"/>
+    <arg name="headless" default="true"/>
+    <arg name="gui" default="true"/>
+    <arg name="est" default="lpe"/>
+
+    <node pkg="trone" type="polygon_estimator.py" name="polygon_estimator_node" output="screen"/>
+    <node pkg="trone" type="vision_pub.py" name="vision_pub_node" output="screen"/>
+
+</launch>
+
+<!-- vim: set ft=xml et fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->
