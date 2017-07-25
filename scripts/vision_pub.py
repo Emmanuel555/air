@@ -62,8 +62,8 @@ class VisionPosition:
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
         rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
         rospy.Subscriber("error_dx", Float32, self.error_dx)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
-        # rospy.Subscriber("error_dy", Float32, self.error_dy)
+        # rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
 
         self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
