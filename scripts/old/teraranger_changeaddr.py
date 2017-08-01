@@ -45,7 +45,7 @@ class TeraRangerOne:     # class constructor; subscribe to topics and advertise 
 	0xde, 0xd9, 0xd0, 0xd7, 0xc2, 0xc5, 0xcc, 0xcb, 0xe6, 0xe1, 0xe8, 0xef,
 	0xfa, 0xfd, 0xf4, 0xf3)
 
-    def __init__(self, bus=1, address=TRONE_BASEADDR, debug=False, freq=I2C_FAST):
+    def __init__(self, bus=1, address=TRONE_BASEADDR, debug=False, freq=I2C_STD):
         self.x = m.I2c(bus) # raw=True forces manual bus selection, vs. board default
         self.address = address
         self.x.frequency(freq) # default to I2C_STD (up to 100kHz). Other options: I2C_FAST (up to 400kHz), I2C_HIGH (up to 3.4Mhz)
@@ -94,8 +94,6 @@ class TeraRangerOne:     # class constructor; subscribe to topics and advertise 
             print "sent crc8: ", bytes3[2], "crc8check: ", crc
 
         if (str(crc) == str(bytes3[2])):
-            if self.debug or deb:
-                print "trone (address = 0x%x) ranged %2d mm" % (self.address, range)
             return range
         else:
             return -255 # bad checksum
@@ -138,20 +136,20 @@ if __name__ == "__main__":
     #print "trone (address = 0x%x) ranged %2d mm" % (trone.address, range)
     #print trone.probe()
 
-    #trone1 = TeraRangerOne(address=0x30, debug=True)
-    #range = trone1.readRangeData()
-    #print "trone (address = 0x%x) ranged %2d mm" % (trone1.address, range)
-    #print trone1.probe()
-    #print trone1.changeNewAddr(newAddr=0x34, deb=True)
+    trone1 = TeraRangerOne(address=0x32, debug=True)
+    range = trone1.readRangeData()
+    print "trone (address = 0x%x) ranged %2d mm" % (trone1.address, range)
+    print trone1.probe()
+    print trone1.changeNewAddr(newAddr=0x35, deb=True)
 
     # trone2 = TeraRangerOne(address=0x33)
     # range = trone2.readRangeData()
     # print "trone (address = 0x%x) ranged %2d mm" % (trone2.address, range)
     # print trone2.probe()
 
-    sensor = []
-    sensor = [TeraRangerOne(address=(0x30 + i), debug=True) for i in range(6)]
+    #sensor = []
+    #sensor = [TeraRangerOne(address=(0x31 + i), debug=True) for i in range(3)]
 
-    for tr in sensor:
-        range = tr.readRangeData()
-        print "trone (address = 0x%x) ranged %2d mm" % (tr.address, range)
+    #for tr in sensor:
+    #    range = tr.readRangeData()
+    #    print "trone (address = 0x%x) ranged %2d mm" % (tr.address, range)
