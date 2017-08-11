@@ -1,0 +1,3 @@
+[submodule "airlab_libraries"]
+	path = airlab_libraries
+	url = https://github.com/tcheehow/airlab_libraries.git
