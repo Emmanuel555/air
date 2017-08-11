@@ -21,7 +21,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.debug = debug
 
         self.updated = [False, False, False, False, False, False]
-        self.orient = [np.pi/4, -3*np.pi/4, -np.pi/4, 3*np.pi/4, 0, np.pi]
+        self.orient = [np.pi/4, 0, -np.pi/4, -3*np.pi/4, np.pi,  3*np.pi/4]
         self.update_rate = 100
 
         rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
@@ -42,42 +42,46 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             self.lsqline_pub();
             rate.sleep()
 
-    def updatePolygonVertex(self, msg, index):
+    def updatePolygonVertex(self, msg, index, debug=False):
         v = msg.ranges[0]
+        v_min = 200/1000;
+        v_max = 14;
+        if (v < v_min or v > v_max):
+            return False
         if index == 0:
             self.v0 = self.rotate(v, self.orient[0])
             self.updated[0] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v0
         elif index == 1:
             self.v1 = self.rotate(v, self.orient[1])
             self.updated[1] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v1
         elif index == 2:
             self.v2 = self.rotate(v, self.orient[2])
             self.updated[2] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v2
         elif index == 3:
             self.v3 = self.rotate(v, self.orient[3])
             self.updated[3] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v3
         elif index == 4:
             self.v4 = self.rotate(v, self.orient[4])
             self.updated[4] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v4
         elif index == 5:
             self.v5 = self.rotate(v, self.orient[5])
             self.updated[5] = True
-            if self.debug == True:
+            if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v5
 
@@ -87,21 +91,21 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         return np.array([x,y])
 
-    def lsqline_pub(self, debug = False):
+    def lsqline_pub(self, debug = True):
 
-        A = np.array([[self.v1[1], -1, 0],
-        [self.v5[1], -1, 0],
-        [self.v3[1], -1, 0],
-        [self.v0[1], 0, -1],
+        A = np.array([[self.v0[1], -1, 0],
+        [self.v1[1], -1, 0],
+        [self.v2[1], -1, 0],
+        [self.v3[1], 0, -1],
         [self.v4[1], 0, -1],
-        [self.v2[1], 0, -1]])
+        [self.v5[1], 0, -1]])
 
-        B = np.array([[-self.v1[0]],
-        [-self.v5[0]],
+        B = np.array([[-self.v0[0]],
+        [-self.v1[0]],
+        [-self.v2[0]],
         [-self.v3[0]],
-        [-self.v0[0]],
         [-self.v4[0]],
-        [-self.v2[0]]])
+        [-self.v5[0]]])
 
         self.updated[0] = False
         self.updated[1] = False
@@ -115,18 +119,20 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
 
         alpha = np.arctan(x[0])
-        rL = x[1] * np.cos(alpha)
-        rR = x[2] * np.cos(alpha)
+        rR = x[1] * np.cos(alpha)
+        rL = x[2] * np.cos(alpha)
 
         width = abs(rL) + abs(rR)
-        dx = (width/2) + rL
-        dy = -0.1
+        dx = -(width/2) - rL
+        dy = -0.05
 
-        if debug == True:
-            print 'yaw: \t\t', -alpha
-            print 'centre: \t', dx
+        if self.debug or debug == True:
+            print 'rL: \t', rL
+            print 'rR: \t', rR
+            print 'yaw: \t', -alpha
+            print 'centre: \t', -dx
 
-        self.errorDx_pub.publish(dx)
+        self.errorDx_pub.publish(-dx)
         self.errorDy_pub.publish(dy)
         self.errorDz_pub.publish(-alpha)
 

@@ -131,10 +131,10 @@ class TeraRangerOne:     # class constructor; subscribe to topics and advertise 
 
 if __name__ == "__main__":
 
-    # trone = TeraRangerOne(address=0x31, debug=True)
-    # range = trone.readRangeData()
-    # print "trone (address = 0x%x) ranged %2d mm" % (trone.address, range)
-    # print trone.probe()
+    trone = TeraRangerOne(address=0x30, debug=True)
+    range = trone.readRangeData()
+    print "trone (address = 0x%x) ranged %2d mm" % (trone.address, range)
+    print trone.probe()
 
     # trone1 = TeraRangerOne(address=0x32)
     # range = trone1.readRangeData()
@@ -147,9 +147,9 @@ if __name__ == "__main__":
     # print "trone (address = 0x%x) ranged %2d mm" % (trone2.address, range)
     # print trone2.probe()
 
-    sensor = []
-    sensor = [TeraRangerOne(address=(0x30 + i), debug=True) for i in range(3)]
-
-    for tr in sensor:
-        range = tr.readRangeData()
-        print "trone (address = 0x%x) ranged %2d mm" % (tr.address, range)
+    # sensor = []
+    # sensor = [TeraRangerOne(address=(0x31 + i), debug=True) for i in range(3)]
+    #
+    # for tr in sensor:
+    #     range = tr.readRangeData()
+    #     print "trone (address = 0x%x) ranged %2d mm" % (tr.address, range)
