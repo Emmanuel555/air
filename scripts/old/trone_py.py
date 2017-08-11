@@ -14,13 +14,13 @@ from sensor_msgs.msg import Range
 
 class TROneNode:     # class constructor; subscribe to topics and advertise intent to publish
     def __init__(self, rosstart = True ):
-        self.sensorCount = 3 # the number of sensors to attempt to add
-        self.update_rate = 10 # hertz
+        self.sensorCount = 6 # the number of sensors to attempt to add
+        self.update_rate = 400 # hertz
 #        self.update_timer = 1/ (self.update_rate)
         self.sensor = []
 
         try:
-            self.sensor = [teraranger.TeraRangerOne(address=(0x31 + i)) for i in range(self.sensorCount)]
+            self.sensor = [teraranger.TeraRangerOne(address=(0x30 + i), debug=False) for i in range(self.sensorCount)]
                 # advertise that we'll publish on the sum and moving_average topics
             self.range_pub = [rospy.Publisher("teraranger%d" %(i), Range) for i in range(self.sensorCount)]
         except:
@@ -42,8 +42,9 @@ class TROneNode:     # class constructor; subscribe to topics and advertise inte
     def timer_callback(self):         # create the message containing the moving average
 
         for i in range(len(self.sensor)):
-            # print "publishing"
+            #print "publishing"
             distance = self.sensor[i].readRangeData()
+            #print distance
             if (distance < 14000 and distance > 200):
                 terarangers_msg = Range()
                 terarangers_msg.header.frame_id = "base_range"
@@ -63,4 +64,4 @@ if __name__ == "__main__":     # initialize the ROS client API, giving the defau
     node = TROneNode()
 
     # enter the ROS main loop
-#    rospy.spin()
+    # rospy.spin()
