@@ -77,8 +77,20 @@ class SetpointPosition:
         self.rate = rospy.Rate(50) # 10hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
+        self.forward = True;
 
         while not rospy.is_shutdown():
+
+            if (self.forward):
+                self.x = self.x + 0.01 # move forward
+            else:
+                self.x = self.x - 0.01
+
+            if (self.x >= 25):
+                self.forward = False
+            if (self.x <= -1):
+                self.forward = True
+
             self.test_posctl()
             #self.test_attctl()
             #self.lpe()
@@ -120,7 +132,7 @@ class SetpointPosition:
             pos.header = Header()
             pos.header.frame_id = "local_origin"
             pos.pose.position.x = self.errorDx/1000
-            pos.pose.position.y = -self.errorDx/1000
+            pos.pose.position.y = self.errorDy/1000
             pos.pose.position.z = self.local_position.pose.position.z
 
             # For demo purposes we will lock yaw/heading to north.

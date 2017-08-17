@@ -61,8 +61,8 @@ class VisionPosition:
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
         rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
-        rospy.Subscriber("error_dx", Float32, self.error_dx)
-        # rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        # rospy.Subscriber("error_dx", Float32, self.error_dx)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
 
@@ -71,24 +71,26 @@ class VisionPosition:
         self.rate = rospy.Rate(20) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
+        self.setpointX = 0;
 
         while not rospy.is_shutdown():
             self.rate.sleep()
-            self.lpe()
+            # self.lpe(self.errorDx)
+            self.lpe(self.errorDx)
 
     #
     # General callback functions used in tests
     #
 
-    def lpe(self):
+    def lpe(self, errorDx):
         if (self.error_updated[0] == True and self.error_updated[1] == True):
             self.error_updated[0] = False
             self.error_updated[1] = False
             pos = PoseStamped()
             pos.header = Header()
             pos.header.frame_id = "local_origin"
-            pos.pose.position.x = self.errorDy
-            pos.pose.position.y = self.errorDx
+            pos.pose.position.x = errorDx
+            pos.pose.position.y = self.errorDy
             pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
@@ -127,8 +129,8 @@ class VisionPosition:
 
     def gazebo_pose(self, msg):
         # print msg.pose[2].position.x
-        self.errorDy = msg.pose[2].position.x
-        self.error_updated[1] = True
+        self.errorDx = msg.pose[2].position.x
+        self.error_updated[0] = True
 
     def error_dx(self, msg):
         self.errorDx = msg.data
