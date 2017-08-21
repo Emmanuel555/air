@@ -68,7 +68,7 @@ class VisionPosition:
 
         self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
 
-        self.rate = rospy.Rate(20) # 20hz
+        self.rate = rospy.Rate(50) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
         self.setpointX = 0;

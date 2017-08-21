@@ -25,7 +25,14 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.pitch = 0
 
         self.updated = [False, False, False, False, False, False]
-        self.orient = [-np.pi/4, -np.pi/2, -3*np.pi/4, 3*np.pi/4, np.pi/2,  np.pi/4]
+        self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
+        self.offset = np.array([[0.2256, -0.1741, 0],
+        [0.1739, -0.1915, 0],
+        [-0.1739, -0.1915, 0],
+        [-0.1739, 0.1915, 0],
+        [0.1739, 0.1915, 0],
+        [0.2256, 0.1741, 0]])
+
         self.update_rate = 100
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
@@ -89,37 +96,37 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if (v < v_min or v > v_max):
             return False
         if index == 0:
-            self.v0 = self.rotate(v, self.orient[0])
+            self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
             self.updated[0] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v0
         elif index == 1:
-            self.v1 = self.rotate(v, self.orient[1])
+            self.v1 = self.offset[index, 0:2] + self.rotate(v, self.orient[1])
             self.updated[1] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v1
         elif index == 2:
-            self.v2 = self.rotate(v, self.orient[2])
+            self.v2 = self.offset[index, 0:2] + self.rotate(v, self.orient[2])
             self.updated[2] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v2
         elif index == 3:
-            self.v3 = self.rotate(v, self.orient[3])
+            self.v3 = self.offset[index, 0:2] + self.rotate(v, self.orient[3])
             self.updated[3] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v3
         elif index == 4:
-            self.v4 = self.rotate(v, self.orient[4])
+            self.v4 = self.offset[index, 0:2] + self.rotate(v, self.orient[4])
             self.updated[4] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v4
         elif index == 5:
-            self.v5 = self.rotate(v, self.orient[5])
+            self.v5 = self.offset[index, 0:2] + self.rotate(v, self.orient[5])
             self.updated[5] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
@@ -136,7 +143,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         v = np.dot(A, x)
         return v
 
-    def lsqline_pub(self, debug = False):
+    def lsqline_pub(self, debug = True):
 
         A = self.bodyXYZ[0:3, 0:3]
 

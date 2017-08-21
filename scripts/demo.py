@@ -86,7 +86,7 @@ class SetpointPosition:
             else:
                 self.x = self.x - 0.01
 
-            if (self.x >= 25):
+            if (self.x >= 5):
                 self.forward = False
             if (self.x <= -1):
                 self.forward = True
