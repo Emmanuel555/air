@@ -33,7 +33,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.1739, 0.1915, 0],
         [0.2256, 0.1741, 0]])
 
-        self.update_rate = 100
+        self.update_rate = 20
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
@@ -143,7 +143,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         v = np.dot(A, x)
         return v
 
-    def lsqline_pub(self, debug = True):
+    def lsqline_pub(self, debug = False):
 
         A = self.bodyXYZ[0:3, 0:3]
 

@@ -39,7 +39,7 @@ from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from mavros_msgs.srv import CommandLong
 from sensor_msgs.msg import NavSatFix, Range, LaserScan
-from gazebo_msgs.msg import ModelStates
+#from gazebo_msgs.msg import ModelStates
 
 class VisionPosition:
     """
@@ -61,14 +61,14 @@ class VisionPosition:
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
         rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
-        # rospy.Subscriber("error_dx", Float32, self.error_dx)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        rospy.Subscriber("error_dx", Float32, self.error_dx)
+        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
 
         self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
 
-        self.rate = rospy.Rate(50) # 20hz
+        self.rate = rospy.Rate(20) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
         self.setpointX = 0;
