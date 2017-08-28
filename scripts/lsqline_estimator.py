@@ -143,7 +143,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         v = np.dot(A, x)
         return v
 
-    def lsqline_pub(self, debug = True):
+    def lsqline_pub(self, debug = False):
 
         A = self.bodyXYZ[0:3, 0:3]
 
