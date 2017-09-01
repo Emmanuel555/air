@@ -42,5 +42,17 @@ param set ATT_EXT_HDG_M 1
 param set ATT_W_HDG 1.0
 ```
 
+## ROS-MATLAB Setup
+
+Edison needs the following configuration for MATLAB to resolve the DNS correctly.
+
+In `.bashrc`, add the following lines
+
+```
+# replace with your edison ip accordingly
+export ROS_IP=192.168.0.106
+export ROS_MASTER_URI=http://192.168.198.106:11311
+ ```
+
 
 
