@@ -21,8 +21,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.v4 = v3
         self.v5 = v3
         self.debug = debug
-        self.roll = 0
-        self.pitch = 0
+        self.roll = 0.0
+        self.pitch = 0.0
 
         self.updated = [False, False, False, False, False, False]
         self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
@@ -33,7 +33,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.1739, 0.1915, 0],
         [0.2256, 0.1741, 0]])
 
-        self.update_rate = 20
+        self.update_rate = 50
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
@@ -48,6 +48,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=10)
         self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=10)
         self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=10)
+        self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=10)
+        self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=10)
 
         rate = rospy.Rate(self.update_rate)
 
@@ -62,10 +64,10 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         rotmZ = euler_matrix(0,0,0,'sxyz')
         bodyX1Y1Z1 = np.dot(rotmZ, bodyXYZ)
         # bodyX1Y1Z1 = rotmZ * bodyXYZ
-        rotmY = euler_matrix(0,-np.pi/4,0,'sxyz')
+        rotmY = euler_matrix(0,pitch,0,'sxyz')
         bodyX2Y2Z2 = np.dot(rotmY, bodyX1Y1Z1)
         # bodyX2Y2Z2 = rotmY * bodyX1Y1Z1
-        rotmX = euler_matrix(-np.pi/4,0,0,'sxyz')
+        rotmX = euler_matrix(roll,0,0,'sxyz')
         bodyX3Y3Z3 = np.dot(rotmX, bodyX2Y2Z2)
         # bodyX3Y3Z3 = rotmX * bodyX2Y2Z2
 
@@ -84,10 +86,12 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
         self.roll = euler[0]
-        self.pitch = euler[1]
+        self.pitch = -euler[1]
+        self.errorDr_pub.publish(self.roll)
+        self.errorDp_pub.publish(self.pitch)
 
         if debug or self.debug:
-            print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', euler[2]
+            print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
 
     def updatePolygonVertex(self, msg, index, debug=False):
         v = msg.ranges[0]
@@ -212,7 +216,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         width = abs(rL) + abs(rR)
         dy = (width/2) - rL
-        dx = -0.05
+        dx = 0
 
         if self.debug or debug:
             print 'rL: \t', rL
