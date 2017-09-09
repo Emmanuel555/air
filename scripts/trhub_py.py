@@ -5,6 +5,7 @@
 import rospy
 import mraa
 import teraranger
+from teraranger_array.msg import RangeArray
 
 # import the Float32 message type
 
@@ -14,7 +15,6 @@ from sensor_msgs.msg import LaserScan
 
 class TROneNode:     # class constructor; subscribe to topics and advertise intent to publish
     def __init__(self):
-        self.sensorCount = 4 # the number of sensors to attempt to add
         self.update_rate = 1 # hertz
 #        self.update_timer = 1/ (self.update_rate)
         self.sensor = []

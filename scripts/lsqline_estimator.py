@@ -37,6 +37,13 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
+        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
+        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
+        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1)
+        self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
+        self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
+
+
         rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
         rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
         rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
@@ -44,12 +51,6 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
         rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
-
-        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=10)
-        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=10)
-        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=10)
-        self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=10)
-        self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=10)
 
         rate = rospy.Rate(self.update_rate)
 
