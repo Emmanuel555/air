@@ -136,11 +136,11 @@ if __name__ == "__main__":
     #print "trone (address = 0x%x) ranged %2d mm" % (trone.address, range)
     #print trone.probe()
 
-    trone1 = TeraRangerOne(address=0x32, debug=True)
+    trone1 = TeraRangerOne(address=0x41, debug=True)
     range = trone1.readRangeData()
     print "trone (address = 0x%x) ranged %2d mm" % (trone1.address, range)
     print trone1.probe()
-    print trone1.changeNewAddr(newAddr=0x35, deb=True)
+    print trone1.changeNewAddr(newAddr=0x32, deb=True)
 
     # trone2 = TeraRangerOne(address=0x33)
     # range = trone2.readRangeData()

@@ -60,15 +60,15 @@ class VisionPosition:
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
-        rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
+        #rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
         rospy.Subscriber("error_dx", Float32, self.error_dx)
         #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
 
-        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
+        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped)
 
-        self.rate = rospy.Rate(20) # 20hz
+        self.rate = rospy.Rate(50) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
         self.setpointX = 0;
@@ -99,11 +99,16 @@ class VisionPosition:
             # euler[2] = self.errorDz
             # print q
             # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-            q = quaternion_from_euler(0, 0, self.errorDz)
+            q = quaternion_from_euler(np.pi, 0, (self.errorDz-np.pi/2-pi))
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
-            pos.pose.orientation.z = q[3]
-            pos.pose.orientation.w = q[2]
+            pos.pose.orientation.z = q[2]
+            pos.pose.orientation.w = q[3]
+            #pos.pose.orientation.x = q[0]
+            #pos.pose.orientation.y = q[1]            
+            #pos.pose.orientation.z = q[3]
+            #pos.pose.orientation.w = q[2]
+            
             # print (euler_from_quaternion(q))[2]
             # pos.pose.orientation = self.local_position.pose.orientation
             # q = self.local_position.pose.orientation
@@ -117,6 +122,7 @@ class VisionPosition:
 
     def position_callback(self, data):
         self.local_position = data
+        self.z = 0
         # self.lpe()
 
     def global_position_callback(self, data):

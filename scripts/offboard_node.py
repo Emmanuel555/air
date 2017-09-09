@@ -84,17 +84,17 @@ class SetpointPosition:
 
         while not rospy.is_shutdown():
 
-            print self.current_state
+            #print self.current_state
 
-            if (self.forward):
-                self.x = self.x + 0.01 # move forward
-            else:
-                self.x = self.x - 0.01
+            #if (self.forward):
+            #    self.x = self.x + 0.01 # move forward
+            #else:
+            #    self.x = self.x - 0.01
 
-            if (self.x >= 5):
-                self.forward = False
-            if (self.x <= -1):
-                self.forward = True
+            #if (self.x >= 5):
+            #    self.forward = False
+            #if (self.x <= -1):
+            #    self.forward = True
 
             self.test_posctl()
             #self.test_attctl()
@@ -160,7 +160,7 @@ class SetpointPosition:
 
             # For demo purposes we will lock yaw/heading to north.
             # pos.pose.orientation = self.local_position.pose.orientation
-            q = quaternion_from_euler(0, 0, 0)
+            q = quaternion_from_euler(np.pi, 0, 0-np.pi/2-np.pi)
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
             pos.pose.orientation.z = q[2]
@@ -249,7 +249,7 @@ class SetpointPosition:
         # For demo purposes we will lock yaw/heading to north.
         yaw_degrees = 0  # North
         yaw = radians(yaw_degrees)
-        quaternion = quaternion_from_euler(0, 0, yaw)
+        quaternion = quaternion_from_euler(0, 0, yaw-np.pi/2-np.pi)
         pos.pose.orientation = Quaternion(*quaternion)
 
         # update timestamp for each published SP
