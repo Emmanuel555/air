@@ -8,6 +8,7 @@ from sensor_msgs.msg import Range, LaserScan
 from rospy.numpy_msg import numpy_msg
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, euler_matrix
+from teraranger_array.msg import RangeArray
 
 # simple class to contain the node's variables and code
 class CentroidFinder:     # class constructor; subscribe to topics and advertise intent to publish
@@ -37,12 +38,13 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
-        rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
-        rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
-        rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex, 3)
-        rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
-        rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
+        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex)
+        # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
+        # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
+        # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
+        # rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex, 3)
+        # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
+        # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
 
         self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=10)
@@ -89,8 +91,17 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if debug or self.debug:
             print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', euler[2]
 
-    def updatePolygonVertex(self, msg, index, debug=False):
-        v = msg.ranges[0]
+    def updatePolygonVertex(self, msg, debug=True):
+        ranges = msg.ranges
+        sensorCount = 6
+        for i in range(sensorCount):
+            v = ranges[i].range
+            if (debug):
+                print 'teraranger' , i, 'distance ', v
+            self.updatePolygonVertex_old(v, i, debug=False)
+
+    def updatePolygonVertex_old(self, msg, index, debug=False):
+        v = msg
         v_min = 200/1000
         v_max = 14
         if (v < v_min or v > v_max):
