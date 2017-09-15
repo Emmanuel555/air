@@ -14,7 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
   geometry_msgs
-  teraranger_array
+#  teraranger_array
 )
 
 ## System dependencies are found with CMake's conventions

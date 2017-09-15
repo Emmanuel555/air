@@ -48,7 +48,7 @@ class SetpointPosition:
     def __init__(self):
         self.x = 0.0
         self.y = 0.0
-        self.z = 1.5
+        self.z = 1.0
         self.errorDx = 0.0
         self.errorDy = 0.0
         self.armed = False

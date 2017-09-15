@@ -66,7 +66,7 @@ class VisionPosition:
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
 
-        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped)
+        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=1)
 
         self.rate = rospy.Rate(50) # 20hz
         self.has_global_pos = True
@@ -89,9 +89,14 @@ class VisionPosition:
             pos = PoseStamped()
             pos.header = Header()
             pos.header.frame_id = "local_origin"
-            pos.pose.position.x = errorDx
-            pos.pose.position.y = self.errorDy
-            pos.pose.position.z = self.z
+            ## pixhawk is using NED convention i.e. x (front/north), y (right,east), z(down)
+            ## however lsq x-y-z is left, front, down
+            #pos.pose.position.x = errorDx
+            #pos.pose.position.y = self.errorDy
+            #pos.pose.position.z = self.z
+            pos.pose.position.y = errorDx
+            pos.pose.position.x = -self.errorDy
+            #pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
             q = self.local_position.pose.orientation
@@ -105,10 +110,10 @@ class VisionPosition:
             pos.pose.orientation.z = q[2]
             pos.pose.orientation.w = q[3]
             #pos.pose.orientation.x = q[0]
-            #pos.pose.orientation.y = q[1]            
+            #pos.pose.orientation.y = q[1]
             #pos.pose.orientation.z = q[3]
             #pos.pose.orientation.w = q[2]
-            
+
             # print (euler_from_quaternion(q))[2]
             # pos.pose.orientation = self.local_position.pose.orientation
             # q = self.local_position.pose.orientation
@@ -150,7 +155,7 @@ class VisionPosition:
         self.errorDz = msg.data
 
 if __name__ == '__main__':
-    rospy.init_node('vision_test_node', anonymous=True)
+    rospy.init_node('vision_test_node')
 
     node = VisionPosition()
 

@@ -34,12 +34,11 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.1739, 0.1915, 0],
         [0.2256, 0.1741, 0]])
 
-        self.update_rate = 50
+        self.update_rate = 20
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-
-        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex)
+        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
         # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
         # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
         # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
@@ -68,7 +67,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         rotmZ = euler_matrix(0,0,0,'sxyz')
         bodyX1Y1Z1 = np.dot(rotmZ, bodyXYZ)
         # bodyX1Y1Z1 = rotmZ * bodyXYZ
-        rotmY = euler_matrix(0,pitch,0,'sxyz')
+        rotmY = euler_matrix(0,-pitch,0,'sxyz') #-pitch because px4 y-axis points to the left.
         bodyX2Y2Z2 = np.dot(rotmY, bodyX1Y1Z1)
         # bodyX2Y2Z2 = rotmY * bodyX1Y1Z1
         rotmX = euler_matrix(roll,0,0,'sxyz')
@@ -79,9 +78,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'bodyX1Y1Z1 ', bodyX1Y1Z1
             print 'bodyX2Y2Z2 ', bodyX2Y2Z2
             print 'bodyX3Y3Z3 ', bodyX3Y3Z3
-            # print 'rotmZ ', rotmZ
-            # print 'rotmY ', rotmY
-            # print 'rotmX ', rotmX
+            #print 'rotmZ ', rotmZ
+            #print 'rotmY ', rotmY
+            #print 'rotmX ', rotmX
 
         return bodyX3Y3Z3
 
@@ -97,14 +96,14 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if debug or self.debug:
             print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
 
-    def updatePolygonVertex(self, msg, debug=True):
+    def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
         sensorCount = 6
         for i in range(sensorCount):
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
-            self.updatePolygonVertex_old(v, i, debug=False)
+            self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
         v = msg
@@ -250,7 +249,7 @@ if __name__ == "__main__":
     rospy.init_node("centroid_finder_node")
     node = CentroidFinder()
 
-    rospy.spin()
+    #rospy.spin()
 
     # v1 = 1.5
     # v2 = 2
