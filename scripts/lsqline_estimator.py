@@ -58,16 +58,17 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         while not rospy.is_shutdown():
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
-            self.bodyXYZ = self.bodyRotation(self.pitch, self.roll) #update the body rotation matrix
+            self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
+            #self.bodyXYZ = self.bodyRotation(-np.pi/8, -np.pi/6)
             self.lsqline_pub()
             rate.sleep()
 
-    def bodyRotation(self, pitch, roll, debug =False):
+    def bodyRotation(self, pitch, roll, debug=False):
         bodyXYZ = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0], [0, 0, 0, 1]])
         rotmZ = euler_matrix(0,0,0,'sxyz')
         bodyX1Y1Z1 = np.dot(rotmZ, bodyXYZ)
         # bodyX1Y1Z1 = rotmZ * bodyXYZ
-        rotmY = euler_matrix(0,-pitch,0,'sxyz') #-pitch because px4 y-axis points to the left.
+        rotmY = euler_matrix(0,pitch,0,'sxyz') #-pitch because px4 y-axis points to the left.
         bodyX2Y2Z2 = np.dot(rotmY, bodyX1Y1Z1)
         # bodyX2Y2Z2 = rotmY * bodyX1Y1Z1
         rotmX = euler_matrix(roll,0,0,'sxyz')
@@ -78,18 +79,18 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'bodyX1Y1Z1 ', bodyX1Y1Z1
             print 'bodyX2Y2Z2 ', bodyX2Y2Z2
             print 'bodyX3Y3Z3 ', bodyX3Y3Z3
-            #print 'rotmZ ', rotmZ
-            #print 'rotmY ', rotmY
-            #print 'rotmX ', rotmX
+            print 'rotmZ ', rotmZ
+            print 'rotmY ', rotmY
+            print 'rotmX ', rotmX
 
         return bodyX3Y3Z3
 
-    def updateRPY(self, data, debug=False):
+    def updateRPY(self, data, debug=True):
         local_position = data
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
         self.roll = euler[0]
-        self.pitch = -euler[1]
+        self.pitch = euler[1]
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)
 
@@ -154,32 +155,60 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         return np.array([x,y])
 
-    def projectSubspace(self, A, B):
+    def projectSubspace(self, A, B, debug=False):
         x = np.linalg.lstsq(A,B)[0]
         v = np.dot(A, x)
+        if (debug):
+            print 'x: ', x
+            print 'v: ', v
         return v
 
     def lsqline_pub(self, debug = False):
-
-        A = self.bodyXYZ[0:3, 0:3]
+        rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz') 
+        A = self.bodyXYZ[0:3, 0:2]
+        
+        if (debug):    
+            print 'A', A
+            print 'rotm', rotm
 
         B = np.array([self.v0[0], self.v0[1], 0])
+        if (debug):    
+            print 'B', B
+
         v0 = self.projectSubspace(A, B)
+        v0 = np.dot(rotm[0:3,0:3], v0)
+        if (debug):
+            print 'v0', v0
 
         B = np.array([self.v1[0], self.v1[1], 0])
         v1 = self.projectSubspace(A, B)
+        v1 = np.dot(rotm[0:3,0:3], v1)
+        if (debug):    
+            print 'v1', v1
 
         B = np.array([self.v2[0], self.v2[1], 0])
         v2 = self.projectSubspace(A, B)
+        v2 = np.dot(rotm[0:3,0:3], v2)
+        if (debug):    
+            print 'v2', v2
 
         B = np.array([self.v3[0], self.v3[1], 0])
         v3 = self.projectSubspace(A, B)
+        v3 = np.dot(rotm[0:3,0:3], v3)
+        if (debug):    
+            print 'v3', v3
 
         B = np.array([self.v4[0], self.v4[1], 0])
         v4 = self.projectSubspace(A, B)
+        v4 = np.dot(rotm[0:3,0:3], v4)
+        if (debug):    
+            print 'v4', v4
 
         B = np.array([self.v5[0], self.v5[1], 0])
         v5 = self.projectSubspace(A, B)
+        v5 = np.dot(rotm[0:3,0:3], v5)
+        if (debug):    
+            print 'v5', v5
 
         A = np.array([[v0[0], -1, 0],
         [v1[0], -1, 0],
@@ -235,9 +264,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'rR: \t', rR
             print 'yaw: \t', alpha
             print 'centre: \t', dy
-            # print 'A: \t', A
-            # print 'B: \t', B
-            # print 'x: \t', x
+            #print 'A: \t', A
+            #print 'B: \t', B
+            #print 'x: \t', x
 
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)
