@@ -22,8 +22,15 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.v4 = v3
         self.v5 = v3
         self.debug = debug
-        self.roll = 0.0
-        self.pitch = 0.0
+        self.roll = 0
+        self.pitch = 0
+        self.M = np.array([[120.5, 70, 121.1, 70.5],
+        [94.5, 60, 85.9, 50],
+        [91, 51.5, 85.9, 50],
+        [42, 81, 50, 85.9],
+        [51.5, 90, 50, 85.9],
+        [68.5, 117.5, 70.5, 121.1]])
+        self.M = self.M/100;
 
         self.updated = [False, False, False, False, False, False]
         self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
@@ -34,7 +41,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.1739, 0.1915, 0],
         [0.2256, 0.1741, 0]])
 
-        self.update_rate = 20
+        self.update_rate = 10
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
@@ -59,9 +66,17 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         while not rospy.is_shutdown():
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
-            #self.bodyXYZ = self.bodyRotation(-np.pi/8, -np.pi/6)
+            #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
             self.lsqline_pub()
             rate.sleep()
+
+    def sensorComp(self, old, i):
+        M = self.M
+        A = np.array([[M[i,0], 1],[M[i,1], 1]])
+        Y = np.array([M[i,2], M[i,3]])
+        X = np.dot(np.linalg.inv(A),Y)
+        new = X[0]*old + X[1]
+        return new
 
     def bodyRotation(self, pitch, roll, debug=False):
         bodyXYZ = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0], [0, 0, 0, 1]])
@@ -85,11 +100,11 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         return bodyX3Y3Z3
 
-    def updateRPY(self, data, debug=True):
+    def updateRPY(self, data, debug=False):
         local_position = data
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-        self.roll = euler[0]
+        self.roll = euler[0] - 0.0174 #offset of 1 deg
         self.pitch = euler[1]
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)
@@ -104,6 +119,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
+            v = self.sensorComp(v,i)
             self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
@@ -159,21 +175,24 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         x = np.linalg.lstsq(A,B)[0]
         v = np.dot(A, x)
         if (debug):
+            print 'A: ', A
+            print 'B: ', B
             print 'x: ', x
             print 'v: ', v
         return v
 
     def lsqline_pub(self, debug = False):
-        rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz') 
+        rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
+        #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
-        
-        if (debug):    
-            print 'A', A
-            print 'rotm', rotm
+
+        #if (debug):
+            #print 'A', A
+            #print 'rotm', rotm
 
         B = np.array([self.v0[0], self.v0[1], 0])
-        if (debug):    
-            print 'B', B
+        #if (debug):
+            #print 'B', B
 
         v0 = self.projectSubspace(A, B)
         v0 = np.dot(rotm[0:3,0:3], v0)
@@ -183,31 +202,31 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         B = np.array([self.v1[0], self.v1[1], 0])
         v1 = self.projectSubspace(A, B)
         v1 = np.dot(rotm[0:3,0:3], v1)
-        if (debug):    
+        if (debug):
             print 'v1', v1
 
         B = np.array([self.v2[0], self.v2[1], 0])
         v2 = self.projectSubspace(A, B)
         v2 = np.dot(rotm[0:3,0:3], v2)
-        if (debug):    
+        if (debug):
             print 'v2', v2
 
         B = np.array([self.v3[0], self.v3[1], 0])
         v3 = self.projectSubspace(A, B)
         v3 = np.dot(rotm[0:3,0:3], v3)
-        if (debug):    
+        if (debug):
             print 'v3', v3
 
         B = np.array([self.v4[0], self.v4[1], 0])
         v4 = self.projectSubspace(A, B)
         v4 = np.dot(rotm[0:3,0:3], v4)
-        if (debug):    
+        if (debug):
             print 'v4', v4
 
         B = np.array([self.v5[0], self.v5[1], 0])
         v5 = self.projectSubspace(A, B)
         v5 = np.dot(rotm[0:3,0:3], v5)
-        if (debug):    
+        if (debug):
             print 'v5', v5
 
         A = np.array([[v0[0], -1, 0],
@@ -266,7 +285,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'centre: \t', dy
             #print 'A: \t', A
             #print 'B: \t', B
-            #print 'x: \t', x
+            print 'x: \t', x
 
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)

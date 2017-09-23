@@ -57,6 +57,7 @@ class VisionPosition:
         self.error_updated = [False, False]
         self.descent = False
         self.z = 0
+        self.fakey = 0
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
@@ -65,15 +66,18 @@ class VisionPosition:
         #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
+        rospy.Subscriber("roll", Float32, self.error_roll)
+        rospy.Subscriber("pitch", Float32, self.error_pitch)
 
         self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=1)
 
-        self.rate = rospy.Rate(50) # 20hz
+        self.rate = rospy.Rate(20) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
         self.setpointX = 0;
 
         while not rospy.is_shutdown():
+            
             self.rate.sleep()
             # self.lpe(self.errorDx)
             self.lpe(self.errorDx)
@@ -87,7 +91,7 @@ class VisionPosition:
             self.error_updated[0] = False
             self.error_updated[1] = False
             pos = PoseStamped()
-            pos.header = Header()
+            pos.header = self.local_position.header #Header()
             pos.header.frame_id = "local_origin"
             ## pixhawk is using NED convention i.e. x (front/north), y (right,east), z(down)
             ## however lsq x-y-z is left, front, down
@@ -104,7 +108,8 @@ class VisionPosition:
             # euler[2] = self.errorDz
             # print q
             # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-            q = quaternion_from_euler(np.pi, 0, (self.errorDz-np.pi/2-pi))
+            #q = quaternion_from_euler(0, 0, -self.errorDz+np.pi/2)
+            q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
             pos.pose.orientation.z = q[2]
@@ -114,7 +119,7 @@ class VisionPosition:
             #pos.pose.orientation.z = q[3]
             #pos.pose.orientation.w = q[2]
 
-            # print (euler_from_quaternion(q))[2]
+            # print q          
             # pos.pose.orientation = self.local_position.pose.orientation
             # q = self.local_position.pose.orientation
 
@@ -137,6 +142,12 @@ class VisionPosition:
         self.z = msg.ranges[0]
         if self.z >= 5:
             self.z = 0
+
+    def error_roll(self, msg):
+        self.roll = msg.data
+
+    def error_pitch(self, msg):
+        self.pitch = msg.data
 
     def gazebo_pose(self, msg):
         # print msg.pose[2].position.x
