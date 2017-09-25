@@ -104,7 +104,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         local_position = data
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-        self.roll = euler[0] - 0.0174 #offset of 1 deg
+        self.roll = euler[0] #offset of 1 deg
         self.pitch = euler[1]
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)

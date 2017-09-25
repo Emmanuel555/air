@@ -61,6 +61,7 @@ class VisionPosition:
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
+        rospy.Subscriber("mavros/distance_sensor/hrlv_ez4_pub", Range, self.error_lpZ, queue_size=1)
         #rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
         rospy.Subscriber("error_dx", Float32, self.error_dx)
         #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
@@ -77,7 +78,7 @@ class VisionPosition:
         self.setpointX = 0;
 
         while not rospy.is_shutdown():
-            
+
             self.rate.sleep()
             # self.lpe(self.errorDx)
             self.lpe(self.errorDx)
@@ -100,7 +101,7 @@ class VisionPosition:
             #pos.pose.position.z = self.z
             pos.pose.position.y = errorDx
             pos.pose.position.x = -self.errorDy
-            #pos.pose.position.z = self.z
+            pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
             q = self.local_position.pose.orientation
@@ -109,6 +110,7 @@ class VisionPosition:
             # print q
             # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
             #q = quaternion_from_euler(0, 0, -self.errorDz+np.pi/2)
+            #self.errorDz = np.pi/4
             q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
@@ -119,7 +121,7 @@ class VisionPosition:
             #pos.pose.orientation.z = q[3]
             #pos.pose.orientation.w = q[2]
 
-            # print q          
+            # print q
             # pos.pose.orientation = self.local_position.pose.orientation
             # q = self.local_position.pose.orientation
 
@@ -132,7 +134,7 @@ class VisionPosition:
 
     def position_callback(self, data):
         self.local_position = data
-        self.z = 0
+        # self.z = 0
         # self.lpe()
 
     def global_position_callback(self, data):
@@ -164,6 +166,9 @@ class VisionPosition:
 
     def error_dz(self, msg):
         self.errorDz = msg.data
+
+    def error_lpZ(self, msg):
+        self.z = msg.range
 
 if __name__ == '__main__':
     rospy.init_node('vision_test_node')
