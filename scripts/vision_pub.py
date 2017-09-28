@@ -58,14 +58,22 @@ class VisionPosition:
         self.error_updated = [False, False]
         self.descent = False
         self.z = 0
-        self.fakey = 0
+        self.fakeX = 0
+        self.fakeY = 0
         self.spX = 0
+        self.spY = 0
+        self.rcX = 0
+        self.rcY = 0
 
-
-        self.rcX_trim = 1500
-        self.x_max = 5.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+        self.rcX_trim = 1519
+        self.x_max = 10.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcX_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingX = self.x_max/self.rcX_max # scaling factor for rcIn to posX
+
+        self.rcY_trim = 1519
+        self.y_max = 100.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+        self.rcY_max = 500.0 #max range of rc from centre trim of 1500
+        self.scalingY = self.y_max/self.rcY_max # scaling factor for rcIn to posX
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
@@ -112,6 +120,7 @@ class VisionPosition:
             #pos.pose.position.z = self.z
             pos.pose.position.y = errorDx
             pos.pose.position.x = -self.errorDy
+            pos.pose.position.x = pos.pose.position.x - self.fakeY
             pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
@@ -149,7 +158,8 @@ class VisionPosition:
         # self.lpe()
 
     def setpoint_callback(self, data):
-        self.spX = data.position.x
+        self.spX = data.position.y #because of ned to enu shit
+        self.spY = -data.position.x
 
     def global_position_callback(self, data):
         self.has_global_pos = True
@@ -188,7 +198,11 @@ class VisionPosition:
         self.rcX = msg.channels[7] - self.rcX_trim
         tempX = self.rcX * self.scalingX #absolute difference in x from the setpointX
         self.fakeX = self.spX - tempX # +ve tempX implies
-        # print self.fakeX
+        #print self.spX
+
+        self.rcY = msg.channels[5] - self.rcY_trim
+        self.fakeY = self.rcY * self.scalingY #absolute difference in x from the setpointX
+        #print self.spX
 
 
 if __name__ == '__main__':
