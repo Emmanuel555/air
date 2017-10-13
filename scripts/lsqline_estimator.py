@@ -55,10 +55,10 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         rotmZ = euler_matrix(0,0,0,'sxyz')
         bodyX1Y1Z1 = np.dot(rotmZ, bodyXYZ)
         # bodyX1Y1Z1 = rotmZ * bodyXYZ
-        rotmY = euler_matrix(0,-np.pi/4,0,'sxyz')
+        rotmY = euler_matrix(0,-pitch,0,'sxyz')
         bodyX2Y2Z2 = np.dot(rotmY, bodyX1Y1Z1)
         # bodyX2Y2Z2 = rotmY * bodyX1Y1Z1
-        rotmX = euler_matrix(-np.pi/4,0,0,'sxyz')
+        rotmX = euler_matrix(-roll,0,0,'sxyz')
         bodyX3Y3Z3 = np.dot(rotmX, bodyX2Y2Z2)
         # bodyX3Y3Z3 = rotmX * bodyX2Y2Z2
 
