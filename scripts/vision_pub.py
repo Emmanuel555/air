@@ -40,7 +40,7 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from mavros_msgs.srv import CommandLong
 from mavros_msgs.msg import PositionTarget, RCIn
 from sensor_msgs.msg import NavSatFix, Range, LaserScan
-#from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 
 class VisionPosition:
     """
@@ -78,11 +78,11 @@ class VisionPosition:
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
-        rospy.Subscriber("mavros/distance_sensor/hrlv_ez4_pub", Range, self.error_lpZ, queue_size=1)
+        # rospy.Subscriber("mavros/distance_sensor/hrlv_ez4_pub", Range, self.error_lpZ, queue_size=1)
         rospy.Subscriber("mavros/rc/in", RCIn, self.updateRCIn, queue_size=1)
-        #rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
+        rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
         rospy.Subscriber("error_dx", Float32, self.error_dx)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
         rospy.Subscriber("roll", Float32, self.error_roll)
@@ -98,9 +98,9 @@ class VisionPosition:
         while not rospy.is_shutdown():
 
             self.rate.sleep()
-            # self.lpe(self.errorDx)
+            self.lpe(self.errorDx)
             # self.lpe(self.errorDx) #for using lsq errorDx = 0
-            self.lpe(self.fakeX) #for using fakeX toggled by RCIn[7]
+            # self.lpe(self.fakeX) #for using fakeX toggled by RCIn[7]
 
     #
     # General callback functions used in tests
