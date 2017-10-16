@@ -82,7 +82,7 @@ class VisionPosition:
         rospy.Subscriber("mavros/rc/in", RCIn, self.updateRCIn, queue_size=1)
         rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
         rospy.Subscriber("error_dx", Float32, self.error_dx)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        # rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
         rospy.Subscriber("error_dy", Float32, self.error_dy)
         rospy.Subscriber("error_dz", Float32, self.error_dz)
         rospy.Subscriber("roll", Float32, self.error_roll)
@@ -118,9 +118,9 @@ class VisionPosition:
             #pos.pose.position.x = errorDx
             #pos.pose.position.y = self.errorDy
             #pos.pose.position.z = self.z
-            pos.pose.position.y = errorDx
-            pos.pose.position.x = -self.errorDy
-            pos.pose.position.x = pos.pose.position.x - self.fakeY
+            pos.pose.position.y = -errorDx
+            pos.pose.position.x = self.errorDy
+            # pos.pose.position.x = pos.pose.position.x - self.fakeY
             pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
@@ -166,7 +166,7 @@ class VisionPosition:
 
     def range_callback(self, msg):
         self.z = msg.ranges[0]
-        if self.z >= 5:
+        if self.z >= 14:
             self.z = 0
 
     def error_roll(self, msg):

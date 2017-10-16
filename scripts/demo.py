@@ -47,7 +47,7 @@ class SetpointPosition:
     def __init__(self):
         self.x = 0.0
         self.y = 0.0
-        self.z = 1.5
+        self.z = 1.0
         self.errorDx = 0.0
         self.errorDy = 0.0
         self.armed = False
@@ -77,20 +77,21 @@ class SetpointPosition:
         self.rate = rospy.Rate(50) # 10hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
-        self.forward = True;
+        self.forward = True
+        self.upwards = True
 
         while not rospy.is_shutdown():
 
-            if (self.forward):
-                self.y = self.y + 0.01 # move forward
-            else:
-                self.y = self.y - 0.01
-
-            if (self.y >= 3):
-                self.forward = False
-            if (self.y <= -1):
-                self.forward = True
-
+            # if (self.forward):
+            #     self.y = self.y + 0.01 # move forward
+            # else:
+            #     self.y = self.y - 0.01
+            #
+            # if (self.y >= 3):
+            #     self.forward = False
+            # if (self.y <= -1):
+            #     self.forward = True
+            self.zctl()
             self.test_posctl()
             #self.test_attctl()
             #self.lpe()
@@ -102,6 +103,19 @@ class SetpointPosition:
     #
     # General callback functions used in tests
     #
+
+    def zctl(self):
+        print self.z
+        if (self.upwards):
+            self.z = self.z + 0.01 # move forward
+        else:
+            self.z = self.z - 0.01
+
+        if (self.z >= 10):
+            self.upwards = False
+        if (self.z <= 1.5):
+            self.upwards = True
+
     def vel(self):
         if (True):
        # if (self.error_updated[0] == True and self.error_updated[1] == True):
