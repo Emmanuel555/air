@@ -21,6 +21,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.v3 = v3
         self.v4 = v3
         self.v5 = v3
+        self.sensorCount = 6
         self.debug = debug
         self.roll = 0
         self.pitch = 0
@@ -68,7 +69,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
             #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
             # self.lsqline_pub()
-            self.lsqcircle_pub()
+            self.lsqcircle_pub_i()
+            # self.lsqcircle_pub()
             rate.sleep()
 
     def sensorComp(self, old, i):
@@ -105,10 +107,10 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         local_position = data
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-        self.roll = 0 #offset of 1 deg
-        self.pitch = 0
-        # self.roll = euler[0] #offset of 1 deg
-        # self.pitch = euler[1]
+        # self.roll = 0 #offset of 1 deg
+        # self.pitch = 0
+        self.roll = euler[0] #offset of 1 deg
+        self.pitch = euler[1]
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)
 
@@ -117,8 +119,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
-        sensorCount = 6
-        for i in range(sensorCount):
+
+        for i in range(self.sensorCount):
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
@@ -128,41 +130,44 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
     def updatePolygonVertex_old(self, msg, index, debug=False):
         # v = msg
         v = msg.ranges[0]
-        v_min = 200/1000
-        v_max = 14
-        if (v < v_min or v > v_max):
-            return False
-        if index == 0:
+        v_min = 200.0/1000.0
+        v_max = 14.0
+        valid = True
+        # print index, ": ", v
+        if ((v <= v_min) or (v >= v_max)):
+            # print "False: ", index
+            valid = False
+        if (index == 0 and valid):
             self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
             self.updated[0] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v0
-        elif index == 1:
+        elif (index == 1 and valid):
             self.v1 = self.offset[index, 0:2] + self.rotate(v, self.orient[1])
             self.updated[1] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v1
-        elif index == 2:
+        elif (index == 2 and valid):
             self.v2 = self.offset[index, 0:2] + self.rotate(v, self.orient[2])
             self.updated[2] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v2
-        elif index == 3:
+        elif (index == 3 and valid):
             self.v3 = self.offset[index, 0:2] + self.rotate(v, self.orient[3])
             self.updated[3] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v3
-        elif index == 4:
+        elif (index == 4 and valid):
             self.v4 = self.offset[index, 0:2] + self.rotate(v, self.orient[4])
             self.updated[4] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v4
-        elif index == 5:
+        elif (index == 5 and valid):
             self.v5 = self.offset[index, 0:2] + self.rotate(v, self.orient[5])
             self.updated[5] = True
             if debug == True:
@@ -185,67 +190,135 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'v: ', v
         return v
 
-    def lsqline_pub(self, debug = False):
+    def lsqcircle_pub_i(self, debug = True):
         rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
-
-        #if (debug):
-            #print 'A', A
-            #print 'rotm', rotm
-
-        B = np.array([self.v0[0], self.v0[1], 0])
-        #if (debug):
-            #print 'B', B
-
-        v0 = self.projectSubspace(A, B)
-        v0 = np.dot(rotm[0:3,0:3], v0)
+        updated = self.updated # lock the current updated matrix
+        vs = np.array([[self.v0[0], self.v0[1], 0], # lock in all the vertices
+        [self.v1[0], self.v1[1], 0],
+        [self.v2[0], self.v2[1], 0],
+        [self.v3[0], self.v3[1], 0],
+        [self.v4[0], self.v4[1], 0],
+        [self.v5[0], self.v5[1], 0]])
+        trues = np.sum(updated)
+        Alsq = np.zeros((trues,3))
+        Blsq = np.zeros((trues,1))
         if (debug):
-            print 'v0', v0
-
-        B = np.array([self.v1[0], self.v1[1], 0])
-        v1 = self.projectSubspace(A, B)
-        v1 = np.dot(rotm[0:3,0:3], v1)
+            print 'updated: ', self.updated
+            print 'trues: ', trues
         if (debug):
-            print 'v1', v1
+            print 'A', A
+            print 'rotm', rotm
+        # print self.v0
+        array_index = 0
 
-        B = np.array([self.v2[0], self.v2[1], 0])
-        v2 = self.projectSubspace(A, B)
-        v2 = np.dot(rotm[0:3,0:3], v2)
-        if (debug):
-            print 'v2', v2
+        for index in range(self.sensorCount):
+            B = vs[index, :]
+            v = self.projectSubspace(A,B)
+            v = np.dot(rotm[0:3,0:3], v)
+            if (updated[index]):
+                Alsq[array_index, :] = [2*v[0], 2*v[1], 1]
+                Blsq[array_index, :] = [v[0]**2+v[1]**2]
+                array_index += 1
+            if (debug):
+                print 'v', 'index', ': ', v
+                print "A: ", Alsq
+                print "B: ", Blsq
 
-        B = np.array([self.v3[0], self.v3[1], 0])
-        v3 = self.projectSubspace(A, B)
-        v3 = np.dot(rotm[0:3,0:3], v3)
-        if (debug):
-            print 'v3', v3
+        # for index in range(self.sensorCount):
+        #     if index == 0:
+        #         B = np.array([self.v0[0], self.v0[1], 0])
+        #         v0 = self.projectSubspace(A, B)
+        #         v0 = np.dot(rotm[0:3,0:3], v0)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v0[0], 2*v0[1], 1]
+        #             Blsq[array_index, :] = [v0[0]**2+v0[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v0', v0
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
+        #
+        #     elif index == 1:
+        #         B = np.array([self.v1[0], self.v1[1], 0])
+        #         v1 = self.projectSubspace(A, B)
+        #         v1 = np.dot(rotm[0:3,0:3], v1)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v1[0], 2*v1[1], 1]
+        #             Blsq[array_index, :] = [v1[0]**2+v1[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v1', v1
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
+        #
+        #     elif index == 2:
+        #         B = np.array([self.v2[0], self.v2[1], 0])
+        #         v2 = self.projectSubspace(A, B)
+        #         v2 = np.dot(rotm[0:3,0:3], v2)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v2[0], 2*v2[1], 1]
+        #             Blsq[array_index, :] = [v2[0]**2+v2[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v2', v2
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
+        #
+        #     elif index == 3:
+        #         B = np.array([self.v3[0], self.v3[1], 0])
+        #         v3 = self.projectSubspace(A, B)
+        #         v3 = np.dot(rotm[0:3,0:3], v3)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v3[0], 2*v3[1], 1]
+        #             Blsq[array_index, :] = [v3[0]**2+v3[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v3', v3
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
+        #
+        #     elif index == 4:
+        #         B = np.array([self.v4[0], self.v4[1], 0])
+        #         v4 = self.projectSubspace(A, B)
+        #         v4 = np.dot(rotm[0:3,0:3], v4)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v4[0], 2*v4[1], 1]
+        #             Blsq[array_index, :] = [v4[0]**2+v4[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v4', v4
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
+        #
+        #     elif index == 5:
+        #         B = np.array([self.v5[0], self.v5[1], 0])
+        #         v5 = self.projectSubspace(A, B)
+        #         v5 = np.dot(rotm[0:3,0:3], v5)
+        #         if (updated[index]):
+        #             Alsq[array_index, :] = [2*v5[0], 2*v5[1], 1]
+        #             Blsq[array_index, :] = [v5[0]**2+v5[1]**2]
+        #             array_index += 1
+        #         if (debug):
+        #             print 'v5', v5
+        #             print "A: ", Alsq
+        #             print "B: ", Blsq
 
-        B = np.array([self.v4[0], self.v4[1], 0])
-        v4 = self.projectSubspace(A, B)
-        v4 = np.dot(rotm[0:3,0:3], v4)
-        if (debug):
-            print 'v4', v4
 
-        B = np.array([self.v5[0], self.v5[1], 0])
-        v5 = self.projectSubspace(A, B)
-        v5 = np.dot(rotm[0:3,0:3], v5)
-        if (debug):
-            print 'v5', v5
-
-        A = np.array([[v0[0], -1, 0],
-        [v1[0], -1, 0],
-        [v2[0], -1, 0],
-        [v3[0], 0, -1],
-        [v4[0], 0, -1],
-        [v5[0], 0, -1]])
-
-        B = np.array([[-v0[1]],
-        [-v1[1]],
-        [-v2[1]],
-        [-v3[1]],
-        [-v4[1]],
-        [-v5[1]]])
+        # A = np.array([[2*v0[0], 2*v0[1], 1],
+        # [2*v1[0], 2*v1[1], 1],
+        # [2*v2[0], 2*v2[1], 1],
+        # [2*v3[0], 2*v3[1], 1],
+        # [2*v4[0], 2*v4[1], 1],
+        # [2*v5[0], 2*v5[1], 1]])
+        #
+        # B = np.array([[v0[0]**2+v0[1]**2],
+        # [v1[0]**2+v1[1]**2],
+        # [v2[0]**2+v2[1]**2],
+        # [v3[0]**2+v3[1]**2],
+        # [v4[0]**2+v4[1]**2],
+        # [v5[0]**2+v5[1]**2]])
 
         # A = np.array([[self.v0[0], -1, 0],
         # [self.v1[0], -1, 0],
@@ -261,6 +334,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [-self.v4[1]],
         # [-self.v5[1]]])
 
+        # reset all after consumption
         self.updated[0] = False
         self.updated[1] = False
         self.updated[2] = False
@@ -271,31 +345,35 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # At = A.transpose()
         #
         # x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
+        # print "A: ", Alsq
+        # print "B: ", Blsq
 
-        x = np.linalg.lstsq(A,B)[0];
-
-        alpha = np.arctan(x[0])
-        rR = x[1] * np.cos(alpha)
-        rL = x[2] * np.cos(alpha)
-
-        width = abs(rL) + abs(rR)
-        dy = (width/2) - rL
-        dx = 0
+        if (np.sum(Alsq) != 0 and np.sum(Blsq) != 0):
+            x = np.linalg.lstsq(Alsq,Blsq)[0];
+            dx = x[0]
+            dy = x[1]
+            r  = np.sqrt(x[2]+dx**2+dy**2)
+            alpha = 0
+        else:
+            dx = 0
+            dy = 0
+            r  = 0
+            alpha = 0
 
         if self.debug or debug:
-            print 'rL: \t', rL
-            print 'rR: \t', rR
-            print 'yaw: \t', alpha
-            print 'centre: \t', dy
-            #print 'A: \t', A
-            #print 'B: \t', B
-            print 'x: \t', x
+            print 'dX: \t', dx
+            print 'dY: \t', dy
+            print 'r: \t', r
+            # print 'A: \t', A
+            # print 'B: \t', B
+            # print 'x: \t', x
 
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)
         self.errorDz_pub.publish(alpha)
 
-    def lsqcircle_pub(self, debug = True):
+
+    def lsqcircle_pub(self, debug = False):
         rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
@@ -303,11 +381,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         #if (debug):
             #print 'A', A
             #print 'rotm', rotm
-
         B = np.array([self.v0[0], self.v0[1], 0])
-        #if (debug):
-            #print 'B', B
-
         v0 = self.projectSubspace(A, B)
         v0 = np.dot(rotm[0:3,0:3], v0)
         if (debug):
