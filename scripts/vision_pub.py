@@ -26,6 +26,8 @@ import threading
 import time
 import mavros
 
+import low_pass
+
 from numpy import linalg
 import numpy as np
 
@@ -66,7 +68,7 @@ class VisionPosition:
         self.rcY = 0
 
         self.rcX_trim = 1519
-        self.x_max = 10.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+        self.x_max = 15.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcX_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingX = self.x_max/self.rcX_max # scaling factor for rcIn to posX
 
@@ -74,6 +76,11 @@ class VisionPosition:
         self.y_max = 100.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcY_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingY = self.y_max/self.rcY_max # scaling factor for rcIn to posX
+
+        self.freq = 10
+        self.lpDx = low_pass.lowpassfilter(self.freq, 0.6)
+        self.lpDy = low_pass.lowpassfilter(self.freq, 0.6)
+
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
         rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
@@ -89,18 +96,21 @@ class VisionPosition:
         rospy.Subscriber("pitch", Float32, self.error_pitch)
 
         self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=1)
-
-        self.rate = rospy.Rate(20) # 20hz
+        self.rate = rospy.Rate(self.freq) # 20hz
         self.has_global_pos = True
         self.local_position = PoseStamped()
-        self.setpointX = 0;
+        self.setpointX = 0
+
+
+        # self.filterDx = 0
+        # self.filterDy = 0
 
         while not rospy.is_shutdown():
 
             self.rate.sleep()
-            # self.lpe(self.errorDx)
+            self.lpe(self.errorDx)
             # self.lpe(self.errorDx) #for using lsq errorDx = 0
-            self.lpe(self.fakeX) #for using fakeX toggled by RCIn[7]
+            # self.lpe(self.fakeX) #for using fakeX toggled by RCIn[7]
 
     #
     # General callback functions used in tests
@@ -118,9 +128,9 @@ class VisionPosition:
             #pos.pose.position.x = errorDx
             #pos.pose.position.y = self.errorDy
             #pos.pose.position.z = self.z
-            pos.pose.position.y = errorDx
-            pos.pose.position.x = -self.errorDy
-            pos.pose.position.x = pos.pose.position.x - self.fakeY
+            pos.pose.position.y = -errorDx
+            pos.pose.position.x = self.errorDy
+            # pos.pose.position.x = pos.pose.position.x - self.fakeY #to activate slider
             pos.pose.position.z = self.z
 
             # For demo purposes we will lock yaw/heading to north.
@@ -131,7 +141,8 @@ class VisionPosition:
             # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
             #q = quaternion_from_euler(0, 0, -self.errorDz+np.pi/2)
             #self.errorDz = np.pi/4
-            q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
+            self.errorDz = np.pi/2
+            q = quaternion_from_euler(np.pi+self.roll, self.pitch, self.errorDz) #x,y,z, 'zyx order'
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
             pos.pose.orientation.z = q[2]
@@ -181,11 +192,13 @@ class VisionPosition:
         self.error_updated[0] = True
 
     def error_dx(self, msg):
-        self.errorDx = msg.data
+        #self.errorDx = msg.data
+        self.errorDx = self.lpDx.update_filter(msg.data)
         self.error_updated[0] = True
 
     def error_dy(self, msg):
-        self.errorDy = msg.data
+        #self.errorDy = msg.data
+        self.errorDy = self.lpDy.update_filter(msg.data)
         self.error_updated[1] = True
 
     def error_dz(self, msg):
