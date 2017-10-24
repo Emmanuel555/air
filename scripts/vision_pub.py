@@ -68,7 +68,15 @@ class VisionPosition:
         self.rcY = 0
 
         self.rcX_trim = 1519
+<<<<<<< HEAD
         self.x_max = 15.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+=======
+<<<<<<< HEAD
+        self.x_max = 15.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+=======
+        self.x_max = 30.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+>>>>>>> bcecf62174c945cd792db568f660893669f3549f
+>>>>>>> ded8e5e7a8aa2dfe3ddd4975446cfd401440b33a
         self.rcX_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingX = self.x_max/self.rcX_max # scaling factor for rcIn to posX
 
