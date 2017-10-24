@@ -24,22 +24,22 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.debug = debug
         self.roll = 0
         self.pitch = 0
-        self.M = np.array([[120.5, 70, 121.1, 70.5],
-        [94.5, 60, 85.9, 50],
-        [91, 51.5, 85.9, 50],
-        [42, 81, 50, 85.9],
-        [51.5, 90, 50, 85.9],
-        [68.5, 117.5, 70.5, 121.1]])
+        self.M = np.array([[87, 131, 70, 112.5],
+        [58.5, 94.5, 51, 84],
+        [60.5, 92.5, 52, 84.5],
+        [94, 60.5, 86, 53.5],
+        [91, 57.5, 89.5, 56.5],
+        [141.5, 89.5, 134, 83]])
         self.M = self.M/100
 
         self.updated = [False, False, False, False, False, False]
         self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
-        self.offset = np.array([[0.2256, -0.1741, 0],
-        [0.1739, -0.1915, 0],
-        [-0.1739, -0.1915, 0],
-        [-0.1739, 0.1915, 0],
-        [0.1739, 0.1915, 0],
-        [0.2256, 0.1741, 0]])
+        self.offset = np.array([[0.2615, -0.154, 0],
+        [0.2130, -0.1690, 0],
+        [-0.2130, -0.1690, 0],
+        [-0.2130, 0.1690, 0],
+        [0.2130, 0.1690, 0],
+        [0.2615, 0.1540, 0]])
 
         self.update_rate = 20
 
