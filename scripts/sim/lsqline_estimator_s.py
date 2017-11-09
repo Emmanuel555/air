@@ -22,38 +22,36 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.v4 = v3
         self.v5 = v3
         self.debug = debug
-        self.sensorCount = 6
         self.roll = 0
         self.pitch = 0
-        self.yaw = 0
         self.M = np.array([[87, 131, 70, 112.5],
         [58.5, 94.5, 51, 84],
         [60.5, 92.5, 52, 84.5],
         [94, 60.5, 86, 53.5],
         [91, 57.5, 89.5, 56.5],
         [141.5, 89.5, 134, 83]])
-        self.M = self.M/100
+        self.M = self.M/100;
 
         self.updated = [False, False, False, False, False, False]
-        self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2, np.pi/4]
-        self.offset = np.array([[0.2615, -0.154, 0],
-        [0.2130, -0.1690, 0],
-        [-0.2130, -0.1690, 0],
-        [-0.2130, 0.1690, 0],
-        [0.2130, 0.1690, 0],
-        [0.2615, 0.1540, 0]])
+        self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
+        self.offset = np.array([[0.2256, -0.1741, 0],
+        [0.1739, -0.1915, 0],
+        [-0.1739, -0.1915, 0],
+        [-0.1739, 0.1915, 0],
+        [0.1739, 0.1915, 0],
+        [0.2256, 0.1741, 0]])
 
         self.update_rate = 10
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
-        # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
-        # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
-        # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
-        # rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex, 3)
-        # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
-        # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
+        # rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
+        rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex_old, 0)
+        rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex_old, 1)
+        rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex_old, 2)
+        rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex_old, 3)
+        rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex_old, 4)
+        rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex_old, 5)
 
         self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
         self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
@@ -61,7 +59,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
         self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
 
-        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY, queue_size=1)
+        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
 
         rate = rospy.Rate(self.update_rate)
 
@@ -69,7 +67,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
             #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
-            self.lsqcircle_pub()
+            self.lsqline_pub()
             rate.sleep()
 
     def sensorComp(self, old, i):
@@ -116,54 +114,52 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
-        for i in range(self.sensorCount):
+        sensorCount = 6
+        for i in range(sensorCount):
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
             v = self.sensorComp(v,i)
-            self.updatePolygonVertex_old([v, ranges[i].range], i)
+            self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
-        v = msg[0]
-        v_old = msg[1]
-        #print v_old
-        v_min = 210.0/1000.0
-        v_max = 14.0
-        valid = True
-        if (v_old < v_min or v_old > v_max): #use the pre-compensated value to check validity
-            valid = False
-            #print 'False'
-        if (index == 0 and valid):
+        # v = msg
+        v = msg.ranges[0]
+        v_min = 200/1000
+        v_max = 14
+        if (v < v_min or v > v_max):
+            return False
+        if index == 0:
             self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
             self.updated[0] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v0
-        elif (index == 1 and valid):
+        elif index == 1:
             self.v1 = self.offset[index, 0:2] + self.rotate(v, self.orient[1])
             self.updated[1] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v1
-        elif (index == 2 and valid):
+        elif index == 2:
             self.v2 = self.offset[index, 0:2] + self.rotate(v, self.orient[2])
             self.updated[2] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v2
-        elif (index == 3 and valid):
+        elif index == 3:
             self.v3 = self.offset[index, 0:2] + self.rotate(v, self.orient[3])
             self.updated[3] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v3
-        elif (index == 4 and valid):
+        elif index == 4:
             self.v4 = self.offset[index, 0:2] + self.rotate(v, self.orient[4])
             self.updated[4] = True
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v4
-        elif (index == 5 and valid):
+        elif index == 5:
             self.v5 = self.offset[index, 0:2] + self.rotate(v, self.orient[5])
             self.updated[5] = True
             if debug == True:
@@ -186,44 +182,82 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'v: ', v
         return v
 
-    def lsqcircle_pub(self, debug = False):
+    def lsqline_pub(self, debug = False):
         rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
-        updated = np.copy(self.updated) # lock the current updated matrix using shallow copy
-        vs = np.array([[self.v0[0], self.v0[1], 0], # lock in all the vertices
-        [self.v1[0], self.v1[1], 0],
-        [self.v2[0], self.v2[1], 0],
-        [self.v3[0], self.v3[1], 0],
-        [self.v4[0], self.v4[1], 0],
-        [self.v5[0], self.v5[1], 0]])
-        trues = np.sum(updated)
-        Alsq = np.zeros((trues,3))
-        Blsq = np.zeros((trues,1))
-        array_index = 0
+
+        #if (debug):
+            #print 'A', A
+            #print 'rotm', rotm
+
+        B = np.array([self.v0[0], self.v0[1], 0])
+        #if (debug):
+            #print 'B', B
+
+        v0 = self.projectSubspace(A, B)
+        v0 = np.dot(rotm[0:3,0:3], v0)
         if (debug):
-            print 'updated: ', updated
-            print 'trues: ', trues
-            # print 'A', A
-            # print 'rotm', rotm
+            print 'v0', v0
 
+        B = np.array([self.v1[0], self.v1[1], 0])
+        v1 = self.projectSubspace(A, B)
+        v1 = np.dot(rotm[0:3,0:3], v1)
+        if (debug):
+            print 'v1', v1
 
-        for index in range(self.sensorCount):
-            B = vs[index, :]
-            v = self.projectSubspace(A,B)
-            v = np.dot(rotm[0:3,0:3], v)
-            if (debug):
-                print 'updated[', index, ']: ', updated[index]
-            if (updated[index]):
-                Alsq[array_index, :] = [2*v[0], 2*v[1], 1]
-                Blsq[array_index, :] = [v[0]**2+v[1]**2]
-                array_index += 1
-            if (debug):
-                print 'v', 'index', ': ', v
-                print "A: ", Alsq
-                print "B: ", Blsq
+        B = np.array([self.v2[0], self.v2[1], 0])
+        v2 = self.projectSubspace(A, B)
+        v2 = np.dot(rotm[0:3,0:3], v2)
+        if (debug):
+            print 'v2', v2
 
-        # reset all after consumption
+        B = np.array([self.v3[0], self.v3[1], 0])
+        v3 = self.projectSubspace(A, B)
+        v3 = np.dot(rotm[0:3,0:3], v3)
+        if (debug):
+            print 'v3', v3
+
+        B = np.array([self.v4[0], self.v4[1], 0])
+        v4 = self.projectSubspace(A, B)
+        v4 = np.dot(rotm[0:3,0:3], v4)
+        if (debug):
+            print 'v4', v4
+
+        B = np.array([self.v5[0], self.v5[1], 0])
+        v5 = self.projectSubspace(A, B)
+        v5 = np.dot(rotm[0:3,0:3], v5)
+        if (debug):
+            print 'v5', v5
+
+        A = np.array([[v0[0], -1, 0],
+        [v1[0], -1, 0],
+        [v2[0], -1, 0],
+        [v3[0], 0, -1],
+        [v4[0], 0, -1],
+        [v5[0], 0, -1]])
+
+        B = np.array([[-v0[1]],
+        [-v1[1]],
+        [-v2[1]],
+        [-v3[1]],
+        [-v4[1]],
+        [-v5[1]]])
+
+        # A = np.array([[self.v0[0], -1, 0],
+        # [self.v1[0], -1, 0],
+        # [self.v2[0], -1, 0],
+        # [self.v3[0], 0, -1],
+        # [self.v4[0], 0, -1],
+        # [self.v5[0], 0, -1]])
+        #
+        # B = np.array([[-self.v0[1]],
+        # [-self.v1[1]],
+        # [-self.v2[1]],
+        # [-self.v3[1]],
+        # [-self.v4[1]],
+        # [-self.v5[1]]])
+
         self.updated[0] = False
         self.updated[1] = False
         self.updated[2] = False
@@ -234,29 +268,25 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # At = A.transpose()
         #
         # x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
-        # print "A: ", Alsq
-        # print "B: ", Blsq
 
-        if (np.sum(Alsq) != 0 and np.sum(Blsq) != 0 and trues >=3): #mandate 3 or more points to publish
-            x = np.linalg.lstsq(Alsq,Blsq)[0];
-            dx = x[0]
-            dy = x[1]
-            r  = np.sqrt(x[2]+dx**2+dy**2)
-            alpha = 0
-        else:
-            dx = 0
-            dy = 0
-            r  = 0
-            alpha = 0
+        x = np.linalg.lstsq(A,B)[0];
+
+        alpha = np.arctan(x[0])
+        rR = x[1] * np.cos(alpha)
+        rL = x[2] * np.cos(alpha)
+
+        width = abs(rL) + abs(rR)
+        dy = (width/2) - rL
+        dx = 0
 
         if self.debug or debug:
-            print 'dX: \t', dx
-            print 'dY: \t', dy
-            print 'r: \t', r
-            print 'trues: \t', trues
-            # print 'A: \t', A
-            # print 'B: \t', B
-            # print 'x: \t', x
+            print 'rL: \t', rL
+            print 'rR: \t', rR
+            print 'yaw: \t', alpha
+            print 'centre: \t', dy
+            #print 'A: \t', A
+            #print 'B: \t', B
+            print 'x: \t', x
 
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)
