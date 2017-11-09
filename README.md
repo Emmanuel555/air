@@ -28,13 +28,13 @@ A new startup script have to be added at `\etc\extras.ext\` to change the baudra
 
 The I2C address of the TROne can be changed to the following convention
 
-    Front
-(35) --- (30)
-(34) --- (31)
-      -
-      -
-      -
-(33) --- (32)
+.    Front
+.(35) --- (30)
+.(34) --- (31)
+.      -
+.      -
+.      -
+.(33) --- (32)
 
 ## Pixhawk 2.1 Amendments for Offboard Control
 
