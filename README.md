@@ -2,6 +2,8 @@
 
 ## Git Branching Strategy
 
+Reference: http://bitstopixels.blogspot.sg/2017/05/a-git-branching-strategy-for-react.html
+
 master: this is the development branch, used to test new code in the gazebo simulator before pushing it to the UAV
 
 dtss-mini: no feature development or bug fixes. only used to do adjustments specific to the mini
