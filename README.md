@@ -1,5 +1,13 @@
 # air
 
+## Git Branching Strategy
+
+master: this is the development branch, used to test new code in the gazebo simulator before pushing it to the UAV
+
+dtss-mini: no feature development or bug fixes. only used to do adjustments specific to the mini
+
+dtss-mega: no feature development or bug fixes. only used to do adjustments specific to the mega
+
 ## Connecting the TROne to Pixhawk 2.1
 
 The Teraranger One (TROne) communicate to the Pixhawk 2.1 via I2C Bus. There are 3 buses on the Pixhawk, Bus 1 (in GPS 1), Bus 2 (in I2C 2) and Bus 3 (in GPS 2). 
