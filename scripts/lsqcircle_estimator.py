@@ -21,6 +21,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.v3 = v3
         self.v4 = v3
         self.v5 = v3
+<<<<<<< HEAD
         self.sensorCount = 6
         self.debug = debug
         self.roll = 0
@@ -35,6 +36,23 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         self.updated = [False, False, False, False, False, False]
         self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
+=======
+        self.debug = debug
+        self.sensorCount = 6
+        self.roll = 0
+        self.pitch = 0
+        self.yaw = 0
+        self.M = np.array([[120.5, 70, 121.1, 70.5],
+        [94.5, 60, 85.9, 50],
+        [91, 51.5, 85.9, 50],
+        [42, 81, 50, 85.9],
+        [51.5, 90, 50, 85.9],
+        [68.5, 117.5, 70.5, 121.1]])
+        self.M = self.M/100
+
+        self.updated = [False, False, False, False, False, False]
+        self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2, np.pi/4]
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         self.offset = np.array([[0.2256, -0.1741, 0],
         [0.1739, -0.1915, 0],
         [-0.1739, -0.1915, 0],
@@ -46,6 +64,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
+<<<<<<< HEAD
         # rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
         rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex_old, 0)
         rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex_old, 1)
@@ -53,6 +72,15 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex_old, 3)
         rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex_old, 4)
         rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex_old, 5)
+=======
+        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
+        # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
+        # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
+        # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
+        # rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex, 3)
+        # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
+        # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
 
         self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
         self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
@@ -60,7 +88,11 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
         self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
 
+<<<<<<< HEAD
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
+=======
+        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY, queue_size=1)
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
 
         rate = rospy.Rate(self.update_rate)
 
@@ -68,9 +100,13 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
             #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
+<<<<<<< HEAD
             # self.lsqline_pub()
             self.lsqcircle_pub_i()
             # self.lsqcircle_pub()
+=======
+            self.lsqcircle_pub()
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
             rate.sleep()
 
     def sensorComp(self, old, i):
@@ -107,24 +143,38 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         local_position = data
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+<<<<<<< HEAD
         # self.roll = 0 #offset of 1 deg
         # self.pitch = 0
         self.roll = euler[0] #offset of 1 deg
         self.pitch = euler[1]
+=======
+        self.roll = euler[0] #offset of 1 deg
+        self.pitch = euler[1]
+        self.yaw = euler[2]
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)
 
         if debug or self.debug:
+<<<<<<< HEAD
             print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
 
+=======
+            print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', self.yaw
+
+    def updatePolygonVertex(self, msg, debug=False):
+        ranges = msg.ranges
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         for i in range(self.sensorCount):
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
             v = self.sensorComp(v,i)
+<<<<<<< HEAD
             self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
@@ -137,6 +187,20 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if ((v <= v_min) or (v >= v_max)):
             # print "False: ", index
             valid = False
+=======
+            self.updatePolygonVertex_old([v, ranges[i].range], i)
+
+    def updatePolygonVertex_old(self, msg, index, debug=False):
+        v = msg[0]
+        v_old = msg[1]
+        #print v_old
+        v_min = 210.0/1000.0
+        v_max = 14.0
+        valid = True
+        if (v_old < v_min or v_old > v_max): #use the pre-compensated value to check validity
+            valid = False
+            #print 'False'
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         if (index == 0 and valid):
             self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
             self.updated[0] = True
@@ -190,11 +254,19 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'v: ', v
         return v
 
+<<<<<<< HEAD
     def lsqcircle_pub_i(self, debug = True):
         rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
         updated = self.updated # lock the current updated matrix
+=======
+    def lsqcircle_pub(self, debug = False):
+        rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
+        #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
+        A = self.bodyXYZ[0:3, 0:2]
+        updated = np.copy(self.updated) # lock the current updated matrix using shallow copy
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         vs = np.array([[self.v0[0], self.v0[1], 0], # lock in all the vertices
         [self.v1[0], self.v1[1], 0],
         [self.v2[0], self.v2[1], 0],
@@ -204,6 +276,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         trues = np.sum(updated)
         Alsq = np.zeros((trues,3))
         Blsq = np.zeros((trues,1))
+<<<<<<< HEAD
         if (debug):
             print 'updated: ', self.updated
             print 'trues: ', trues
@@ -212,11 +285,25 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'rotm', rotm
         # print self.v0
         array_index = 0
+=======
+        array_index = 0
+        if (debug):
+            print 'updated: ', updated
+            print 'trues: ', trues
+            # print 'A', A
+            # print 'rotm', rotm
+
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
 
         for index in range(self.sensorCount):
             B = vs[index, :]
             v = self.projectSubspace(A,B)
             v = np.dot(rotm[0:3,0:3], v)
+<<<<<<< HEAD
+=======
+            if (debug):
+                print 'updated[', index, ']: ', updated[index]
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
             if (updated[index]):
                 Alsq[array_index, :] = [2*v[0], 2*v[1], 1]
                 Blsq[array_index, :] = [v[0]**2+v[1]**2]
@@ -226,6 +313,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
                 print "A: ", Alsq
                 print "B: ", Blsq
 
+<<<<<<< HEAD
         # for index in range(self.sensorCount):
         #     if index == 0:
         #         B = np.array([self.v0[0], self.v0[1], 0])
@@ -334,6 +422,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [-self.v4[1]],
         # [-self.v5[1]]])
 
+=======
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
         # reset all after consumption
         self.updated[0] = False
         self.updated[1] = False
@@ -348,7 +438,11 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # print "A: ", Alsq
         # print "B: ", Blsq
 
+<<<<<<< HEAD
         if (np.sum(Alsq) != 0 and np.sum(Blsq) != 0):
+=======
+        if (np.sum(Alsq) != 0 and np.sum(Blsq) != 0 and trues >=3): #mandate 3 or more points to publish
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
             x = np.linalg.lstsq(Alsq,Blsq)[0];
             dx = x[0]
             dy = x[1]
@@ -364,12 +458,17 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'dX: \t', dx
             print 'dY: \t', dy
             print 'r: \t', r
+<<<<<<< HEAD
+=======
+            print 'trues: \t', trues
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
             # print 'A: \t', A
             # print 'B: \t', B
             # print 'x: \t', x
 
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)
+<<<<<<< HEAD
         self.errorDz_pub.publish(alpha)
 
 
@@ -474,6 +573,10 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.errorDx_pub.publish(dx)
         self.errorDy_pub.publish(dy)
         self.errorDz_pub.publish(alpha)
+=======
+        #self.errorDz_pub.publish(alpha)
+        self.errorDz_pub.publish(self.yaw)
+>>>>>>> 73d43ede3d80a713a493c73900d4ed47dec407d8
 
 
 if __name__ == "__main__":
