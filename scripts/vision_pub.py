@@ -27,6 +27,7 @@ import time
 import mavros
 
 import low_pass
+import median_filter
 
 from numpy import linalg
 import numpy as np
@@ -77,9 +78,14 @@ class VisionPosition:
         self.rcY_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingY = self.y_max/self.rcY_max # scaling factor for rcIn to posX
 
+
+        self.medianBuffer = 8
+        self.lpDx = median_filter.medianfilter(self.medianBuffer)
+        self.lpDy = median_filter.medianfilter(self.medianBuffer)
+
         self.freq = 10
-        self.lpDx = low_pass.lowpassfilter(self.freq, 0.6)
-        self.lpDy = low_pass.lowpassfilter(self.freq, 0.6)
+        # self.lpDx = low_pass.lowpassfilter(self.freq, 0.6)
+        # self.lpDy = low_pass.lowpassfilter(self.freq, 0.6)
 
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
