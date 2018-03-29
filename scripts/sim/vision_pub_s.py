@@ -112,7 +112,7 @@ class VisionPosition:
             self.error_updated[1] = False
             pos = PoseStamped()
             pos.header = self.local_position.header #Header()
-            pos.header.frame_id = "local_origin"
+            pos.header.frame_id = "base_link"
             ## pixhawk is using NED convention i.e. x (front/north), y (right,east), z(down)
             ## however lsq x-y-z is left, front, down
             #pos.pose.position.x = errorDx
