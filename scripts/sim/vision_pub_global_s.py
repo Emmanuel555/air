@@ -51,6 +51,8 @@ class VisionPosition:
     This class sends position targets to FCU's position controller
     """
     def __init__(self):
+
+        # mavros lpe parameters
         self.errorDx = 0.0
         self.errorDy = 0.0
         self.errorDz = 0.0
@@ -62,69 +64,49 @@ class VisionPosition:
         self.error_updated = [False, False]
         self.descent = False
         self.z = 0
-        self.fakeX = 0
-        self.fakeY = 0
-        self.spX = 0
-        self.spY = 0
-        self.rcX = 0
-        self.rcY = 0
+        self.calibrationCount = 200.0
+        self.lposX = 0.0
+        self.lposY = 0.0
+        self.lposZ = 0.0
+
+        # cartographer parameters
+
+        self.lpeHomed = False
+        self.imuCalibrated = False
+        self.xyVelCalibrated = False
+        self.imuYawQ = Quaternion()
+        self.last_twist = TwistStamped()
+        self.local_position = PoseStamped()
+        self.lpos = PoseStamped()
+
+        # odometry
+
+        self.odomXYZ = [0.0, 0.0, 0.0] # x,y,z
+        self.odomDT = 0.0 # update
+
+        # legacy/unused parameters
 
         self.rcX_trim = 1519
         self.x_max = 30.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcX_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingX = self.x_max/self.rcX_max # scaling factor for rcIn to posX
-
         self.rcY_trim = 1519
         self.y_max = 100.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcY_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingY = self.y_max/self.rcY_max # scaling factor for rcIn to posX
-        self.imuCalibrated = False
         self.imuOffset = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.imu = Imu()
-        self.last_twist = TwistStamped()
-        self.pub_imu_tf = TransformBroadcaster()
-        self.pub_rplidar_tf = TransformBroadcaster()
-        self.sub_robot_tf = TransformListener()
-        self.pub_imu = rospy.Publisher('imu', Imu, queue_size=1)
-        self.local_position = PoseStamped()
-        self.lpos = PoseStamped()
-        # rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
-        # rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
-        rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
-        # rospy.Subscriber("mavros/distance_sensor/hrlv_ez4_pub", Range, self.error_lpZ, queue_size=1)
-        # rospy.Subscriber("mavros/rc/in", RCIn, self.updateRCIn, queue_size=1)
-        # rospy.Subscriber("teraranger0/laser/scan", LaserScan, self.range_callback)
-        # rospy.Subscriber("error_dx", Float32, self.error_dx)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
-        # rospy.Subscriber("error_dy", Float32, self.error_dy)
-        rospy.Subscriber("error_dz", Float32, self.error_dz)
-        rospy.Subscriber("mavros/imu/data", Imu, self.imu_remap)
-        # rospy.Subscriber("roll", Float32, self.error_roll)
-        # rospy.Subscriber("pitch", Float32, self.error_pitch)
-        rospy.Subscriber("reinit_pose", Float32, self.reinit_pose)
-        rospy.Subscriber("mavros/local_position/velocity", TwistStamped, self.lpos_velocity_cb)
-        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.lpos_pose_cb)
-
-        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
-        self.pub_spt = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=1)
-        self.pub_cmd_vel = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=1)
-        self.pub_cmd_vel_attitude = rospy.Publisher('mavros/setpoint_attitude/cmd_vel', TwistStamped, queue_size=1)
-        self.pub_att_thr = rospy.Publisher('mavros/setpoint_attitude/att_throttle', Float64, queue_size=10)
-        rospy.Subscriber("cmd_vel", Twist, self.publish_cmd_vel)
-        self.odom = rospy.Publisher('odom', Odometry, queue_size=10)
-
-        # self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
-        # self.move_base.wait_for_server(rospy.Duration(60))
-
-        self.rate = rospy.Rate(50) # 20hz
+        self.xyVelOffset = [0, 0.0, 0.0, 0.0]
         self.has_global_pos = True
         self.setpointX = 0.0
         self.transUpdated = False
         self.roll = 0.00
         self.pitch = 0.00
         self.yaw = 0.00
+        self.initialYawOffset = 0.00
         self.rotm = None
         self.vz = 0.0
+        self.wz = 0.0
         self.vy = 0.0
         self.vx = 0.0
         self.thr = 0.6
@@ -132,36 +114,80 @@ class VisionPosition:
         self.last_twist_updated = rospy.Time.from_sec(0.0)
         self.hover_x = 0.0
         self.hover_y = 0.0
+        self.fakeX = 0
+        self.fakeY = 0
+        self.spX = 0
+        self.spY = 0
+        self.rcX = 0
+        self.rcY = 0
+
+        # transforms
+        self.sub_robot_tf = TransformListener()
+
+        # subscribers
+        rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazebo_pose)
+        rospy.Subscriber("error_dz", Float32, self.error_dz)
+        rospy.Subscriber("mavros/imu/data", Imu, self.imu_remap, queue_size=1)
+        rospy.Subscriber("reinit_pose", Float32, self.reinit_pose)
+        rospy.Subscriber("mavros/local_position/velocity", TwistStamped, self.lpos_velocity_cb, queue_size=1)
+        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.lpos_pose_cb, queue_size=1)
+        rospy.Subscriber("cmd_vel", Twist, self.publish_cmd_vel, queue_size=1)
+
+        # publishers
+        self.pub_lpe = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=1)
+        self.pub_spt = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=1)
+        self.pub_cmd_vel = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=1)
+        self.pub_cmd_vel_attitude = rospy.Publisher('mavros/setpoint_attitude/cmd_vel', TwistStamped, queue_size=1)
+        self.pub_att_thr = rospy.Publisher('mavros/setpoint_attitude/att_throttle', Float64, queue_size=1)
+        self.odom = rospy.Publisher('odom', Odometry, queue_size=1)
+        self.pub_imu = rospy.Publisher('imu', Imu, queue_size=1)
+
+        # rospy parameters
+        self.rate = rospy.Rate(50) # 20hz
+
 
 
         while not rospy.is_shutdown():
-            # print 'roll', euler[0], '\t pitch', euler[1]
-            # self.pub_rplidar_tf.sendTransform((0,0,0), quaternion_from_euler(0,0,np.pi), rospy.Time.now(), "rplidar_link", "base_link")
             try:
-                (self.trans, self.rot) = self.sub_robot_tf.lookupTransform('/map', '/base_link', rospy.Time(0))
-                # (self.trans, self.rot) = self.sub_robot_tf.lookupTransform('/odom', '/base_link', rospy.Time(0))
+                # get transform from odom -> base_link
+                (self.trans, self.rot) = self.sub_robot_tf.lookupTransform('/odom', '/base_link', rospy.Time(0))
+                #
+                # q = self.rot
+                # euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3])))
+                #
+                # print 'initial offset: ', self.initialYawOffset
                 self.transUpdated = True
-                # pose = self.pose_from_tf(self.trans, self.rot)
-                # print pose
             except:
                 # print 'err'
                 self.transUpdated = False
-            self.rate.sleep()
+
             # self.publish_spt()
+            if (not self.lpeHomed and self.imuCalibrated):
+                self.lpe_homing() # set starting pose as zero yaw i.e. North, allow for the compass to home to zero. takes time
             self.lpe(self.errorDx)
 
             # self.last_twist.twist.linear.x = 0.1
             diff = rospy.Time.now() - self.last_twist_updated
             # print 'time diff: ', diff.secs
             # self.pub_cmd_vel.publish(self.last_twist)
-            if (diff.secs <= 1):
+            if (diff.secs <= 1.0):
                 # print 'cmd_vel: true'
-                self.hover_x = self.lpos.x
-                self.hover_y = self.lpos.y
+                rotm = euler_matrix(0, 0, -self.yaw, 'sxyz') # rotm from world enu to map enu
+                trans = np.array([self.lpos.x, self.lpos.y, 0])
+                self.hover_x = trans[0]
+                self.hover_y = trans[1]
+                self.last_twist.twist.linear.x = 0.1
+                self.last_twist.twist.linear.y = 0.0
+                self.last_twist.twist.linear.z = 0.00
+                self.last_twist.twist.angular.x = 0.0
+                self.last_twist.twist.angular.y = 0.0
+                self.last_twist.twist.angular.z = 0.0
                 self.pub_cmd_vel.publish(self.last_twist)
             else:
-                print 'cmd_vel: false, hovering in place (x,y): ', self.hover_x, self.hover_y
+                # print 'cmd_vel: false, hovering in place (x,y): ', self.hover_x, self.hover_y
                 self.publish_spt(x=self.hover_x, y=self.hover_y)
+
             # self.last_twist_updated = False
             # self.pub_cmd_vel_attitude.publish(self.last_twist)
 
@@ -178,10 +204,27 @@ class VisionPosition:
 
             # self.lpe(self.errorDx) #for using lsq errorDx = 0
             # self.lpe(self.fakeX) #for using fakeX toggled by RCIn[7]
+            self.rate.sleep()
 
     #
     # General callback functions used in tests
     #
+
+    def lpe_homing(self):
+        pos = PoseStamped()
+        pos.header = Header()
+        pos.header.frame_id = "base_link"
+        # print 'yaw: ', self.yaw
+        q = quaternion_from_euler(np.pi, 0.0, np.pi/2.0 + 0.00)
+        pos.pose.orientation = Quaternion(*q)
+        # pos.pose.orientation.x = 0
+        # pos.pose.orientation.y = 0
+        # pos.pose.orientation.z = 0
+        # pos.pose.orientation.w = 1
+        pos.header.stamp = rospy.Time.now()
+        self.pub_lpe.publish(pos)
+        # print 'Yaw: ', self.yaw
+        # print 'Homing LPE'
 
     def publish_spt(self, x=0, y=0, z=1):
         pos = PoseStamped()
@@ -192,7 +235,7 @@ class VisionPosition:
         pos.pose.position.z = z
 
         # For demo purposes we will lock yaw/heading to north.
-        quaternion = quaternion_from_euler(np.pi, 0, np.pi/2)
+        quaternion = quaternion_from_euler(np.pi, 0, np.pi/2+self.imuOffset[6] - np.pi/2.0)
         pos.pose.orientation = Quaternion(*quaternion)
         pos.header.stamp = rospy.Time.now()
         self.pub_spt.publish(pos)
@@ -207,10 +250,29 @@ class VisionPosition:
     #     self.move_base.send_goal(goal)
 
     def lpos_velocity_cb(self, data):
+
+        # if (self.xyVelOffset[0] <= 50 and not self.xyVelCalibrated):
+        #     self.xyVelOffset[1] += data.twist.linear.x
+        #     self.xyVelOffset[2] += data.twist.linear.y
+        #     self.xyVelOffset[3] += data.twist.linear.z
+        #     self.xyVelOffset[0] += 1
+        #     print 'calibrating velocities'
+        #     if self.xyVelOffset[0] == 50:
+        #         for i in range(3):
+        #             self.xyVelOffset[i+1] /= 50.0
+        #         # self.imuOffset[6] = -self.imuOffset[6]
+        #         print 'velocity calibrated'
+        #         self.xyVelCalibrated = True
+        #
+        # print 'velOffset_x: ', self.xyVelOffset[1]
+        # print 'velOffset_y: ', self.xyVelOffset[2]
+        # print 'velOffset_z: ', self.xyVelOffset[3]
+
         # earth-fixed ENU
-        self.vz = data.twist.linear.z
-        self.vx = data.twist.linear.x
-        self.vy = data.twist.linear.y
+        self.vx = data.twist.linear.x # - self.xyVelOffset[1]
+        self.vy = data.twist.linear.y #- self.xyVelOffset[2]
+        self.vz = data.twist.linear.z #- self.xyVelOffset[3]
+        self.wz = data.twist.angular.z
 
     def lpos_pose_cb(self, data):
         # earth-fixed ENU
@@ -218,26 +280,33 @@ class VisionPosition:
 
     def publish_cmd_vel(self, data):
         # subscribed data is in base-link ENU
-        # rotm = euler_matrix(0, 0, self.yaw , 'sxyz')
-        # trans = np.array([data.linear.x, data.linear.y, data.linear.z])
-        rotm = euler_matrix(0, 0, self.yaw , 'sxyz')
-        trans = np.array([data.linear.x, data.linear.y, data.linear.z])
-        # print 'before: ', trans
+
+        # data.linear.x = 0.1
+        # data.linear.y = 0.3
+
+        # cmd_vel received in body frame?
+        rotm = euler_matrix(0, 0, self.yaw, 'sxyz') # rotm from body to world
+        trans = np.array([data.linear.x, data.linear.y, data.linear.z]) # rot the cmd_vel to world-fixed ENU
+
+        # published cmd_vel in world-fixed ENU
         trans = np.dot(rotm[0:3,0:3], trans)
-        # print 'after: ', trans
         data.linear.x = trans[0]
         data.linear.y = trans[1]
+
+
         # published cmd_vel is in earth-fixed ENU
         twist = TwistStamped()
         twist.header = Header()
         twist.header.frame_id = "odom"
 
+        # if there are translation vel and rotation vel, direct pass through to commands
         if (np.absolute(data.linear.x) >= 0.0001 or np.absolute(data.linear.y) >= 0.0001):
+            # print "cmd vel publisher: trans and rot bypass"
             twist.twist.linear.x = data.linear.x
             twist.twist.linear.y = data.linear.y
-            twist.twist.linear.z = 0
-            twist.twist.angular.x = 0
-            twist.twist.angular.y = 0
+            twist.twist.linear.z = 0.0
+            twist.twist.angular.x = 0.0
+            twist.twist.angular.y = 0.0
             # print data.angular.z
             twist.twist.angular.z = data.angular.z
 
@@ -245,24 +314,40 @@ class VisionPosition:
             # self.pub_cmd_vel.publish(twist)
             self.last_twist = twist
             # self.pub_cmd_vel_attitude.publish(twist)
+
+        # if only translational command, try to make it rotate on the spot with "flow" feedback
         elif (np.absolute(data.angular.z) > 0.0001):
+            # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
+            # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
+            # trans = np.dot(rotm[0:3,0:3], trans)
             # try to hold position while yawing
-            twist.twist.linear.x = -0.1*self.vx
-            twist.twist.linear.y = -0.1*self.vy
-            twist.twist.linear.z = 0
-            twist.twist.angular.x = 0
-            twist.twist.angular.y = 0
+            # print "cmd vel publisher: rotating in place"
+            twist.twist.linear.x = -0.8 * self.vx
+            twist.twist.linear.y = -0.8 * self.vy
+            twist.twist.linear.z = 0.00
+            twist.twist.angular.x = 0.0
+            twist.twist.angular.y = 0.0
             twist.twist.angular.z = data.angular.z
             self.last_twist = twist
+
+        # if no commands, dun move
         else:
             # no cmd_vel
-            twist.twist.linear.x = 0
-            twist.twist.linear.y = 0
+            # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
+            # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
+            # trans = np.dot(rotm[0:3,0:3], trans)
+            twist.twist.linear.x = 0 #-trans[0]
+            twist.twist.linear.y = 0 #-trans[1]
             twist.twist.linear.z = 0
             twist.twist.angular.x = 0
             twist.twist.angular.y = 0
             twist.twist.angular.z = 0
             self.last_twist = twist
+
+        # publish the commands
+        # self.last_twist.twist.linear.x = -0.5*self.vx
+        # self.last_twist.twist.linear.y = -0.5*self.vy
+        # self.last_twist.twist.angular.z = 0.1
         self.last_twist.header.stamp = rospy.Time.now()
         self.last_twist_updated = rospy.Time.now()
 
@@ -271,25 +356,39 @@ class VisionPosition:
         odom.header.stamp = rospy.Time.now()
         odom.header.frame_id = "odom"
 
-        odom.pose.pose.position.x = x
-        odom.pose.pose.position.y = y
+        # position should be in map frame, rviz, but not important
+        odom.pose.pose.position.x = 0.0
+        odom.pose.pose.position.y = 0.0
         odom.pose.pose.position.z = 0.0
         odom_quat = quaternion_from_euler(0, 0, 0)
         odom.pose.pose.orientation = Quaternion(*odom_quat)
 
-        rotm = euler_matrix(0, 0, self.yaw , 'sxyz')
-        trans = np.array([self.vx, self.vy, self.vz])
-        # print 'before: ', trans
+
+        q = self.rot
+        euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3])))
+        # print 'map yaw: ', euler[2]
+        yaw = self.initialYawOffset + euler[2]
+        if yaw >= np.pi:
+            yaw -= 2.0*np.pi
+        if yaw <= -np.pi:
+            yaw += 2.0*np.pi
+        print "self.intialYawOffset: ", self.initialYawOffset
+        print "yaw: ", yaw
+        rotm = euler_matrix(0, 0, -yaw, 'sxyz') # rotation matrix based on yaw offset from initial yaw
+
+        trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
         trans = np.dot(rotm[0:3,0:3], trans)
-        # print 'after: ', trans
         odom.twist.twist.linear.x = trans[0]
         odom.twist.twist.linear.y = trans[1]
+        # odom.twist.twist.linear.z = trans[2]
+        # odom.twist.twist.angular.z = self.wz
 
         odom.child_frame_id = "base_link"
         self.odom.publish(odom)
 
     def lpe(self, errorDx):
         if (self.error_updated[0] == True and self.error_updated[1] == True and self.transUpdated == True):
+            self.lpeHomed = True
 
             # self.error_updated[0] = False
             # self.error_updated[1] = False
@@ -305,14 +404,33 @@ class VisionPosition:
             # working conversion for gazebostates, must be sent in ENU
             # pos.pose.position.y = self.errorDy
             # pos.pose.position.x = self.errorDx
-            q = self.local_position.orientation
-            euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+            # q = self.local_position.orientation
+            # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
             # print 'roll ', euler[0], '\t pitch ', euler[1], '\t yaw ', euler[2]
             # q = quaternion_from_euler(np.pi+euler[0], euler[1], np.pi/2+euler[2]) #x,y,z, 'zyx order'
             # print 'yaw: ', self.yaw
 
-            self.yaw = -(-euler[2]+np.pi/2)
-            q = quaternion_from_euler(np.pi+euler[0], euler[1], np.pi/2-np.pi/2+euler[2]) #x,y,z, 'zyx order'
+            # # using gazebo mag
+            # q = self.local_position.orientation
+            # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+            # q = quaternion_from_euler(np.pi+euler[0], euler[1], np.pi/2-np.pi/2+euler[2]) #x,y,z, 'zyx order'
+
+            # using carto mag
+            # yaw = -(-euler[2]+np.pi/2)
+
+            q = self.imuYawQ
+            # print 'imuYawQ: ', q
+            euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+            yaw = euler[2] - np.pi/2.0
+            if yaw <= -np.pi:
+                yaw += 2.0*np.pi
+            # print 'yaw offset initial: ', self.imuOffset[6] - np.pi/2.0
+            # self.yaw = np.mod(euler[2]+np.pi - self.imuOffset[6], 2*np.pi)
+            # self.yaw = self.yaw - np.pi
+            # yaw = self.yaw
+            # print 'yaw: ', self.yaw
+            q = quaternion_from_euler(np.pi+euler[0], euler[1], np.pi/2.00+yaw) #x,y,z, 'zyx order'
+
             # q = quaternion_from_euler(np.pi+euler[0], euler[1], np.pi/2-np.pi/2+euler[2]) #x,y,z, 'zyx order' when facing east
             pos.pose.orientation = Quaternion(*q) # quaternion must be sent in NED (weird MAVROS implementation)
 
@@ -321,9 +439,9 @@ class VisionPosition:
             # pos.pose.position.x = -self.errorDy
 
             # self.rotm = euler_matrix(0, 0, euler[2]-np.pi/2, 'sxyz')
-            self.rotm = euler_matrix(0, 0, 0, 'sxyz')
+            self.rotm = euler_matrix(0, 0, self.yaw, 'sxyz')
             trans = np.dot(self.rotm[0:3,0:3], self.trans)
-            self.errorDy = trans[1] # rotate from cartoY in the body frame to earth-fixed frame
+            self.errorDy = -trans[1] # rotate from cartoY in the body frame to earth-fixed frame
             self.errorDx = trans[0] # cartoX in the body frame
 
             self.transUpdated = False
@@ -365,17 +483,8 @@ class VisionPosition:
             # update timestamp for each published SP
             pos.header.stamp = rospy.Time.now()
             self.pub_lpe.publish(pos)
+            # self.publish_odom(self.trans[0], self.trans[1])
             self.publish_odom(self.trans[0], self.trans[1])
-
-    def pose_from_tf(self, trans, rot):
-        euler = np.array(euler_from_quaternion((rot[0], rot[1], rot[2], rot[3])))
-        rotm = euler_matrix(euler[0], euler[1], euler[2], 'sxyz')
-        self.roll = euler[0]
-        self.pitch = euler[1]
-        self.yaw = euler[2]
-        pose = np.dot(rotm[0:3,0:3], trans)
-        # print 'roll ', euler[0], '\t pitch ', euler[1], '\t yaw ', np.pi/4+euler[2]
-        return pose
 
     def reinit_pose(self, msg):
         if msg.data >= 1:
@@ -389,45 +498,73 @@ class VisionPosition:
 
     def imu_remap(self, data):
 
-        if (self.imuCalibrated == False and self.imuOffset[0] <= 50):
+        self.imuYawQ.x = data.orientation.x
+        self.imuYawQ.y = data.orientation.y
+        self.imuYawQ.z = data.orientation.z
+        self.imuYawQ.w = data.orientation.w
+        euler_raw = euler_from_quaternion((self.imuYawQ.x, self.imuYawQ.y,self.imuYawQ.z,self.imuYawQ.w))
+        tmp_yaw = euler_raw[2]# make it same as gazebo but doesn't really matter
+        self.yaw = euler_raw[2] - np.pi/2.0
+        if self.yaw <= -np.pi:
+            self.yaw += 2.0*np.pi
+
+        if (self.imuCalibrated == False and self.imuOffset[0] <= int(self.calibrationCount)):
             self.imuOffset[1] += data.angular_velocity.x
             self.imuOffset[2] += data.angular_velocity.y
             self.imuOffset[3] += data.angular_velocity.z
             self.imuOffset[4] += data.linear_acceleration.x
             self.imuOffset[5] += data.linear_acceleration.y
+            self.imuOffset[6] += tmp_yaw # from 0 to 2pi
             self.imuOffset[0] += 1
-            print 'calibrating imu'
-            if self.imuOffset[0] == 50:
-                for i in range(5):
-                    self.imuOffset[i+1] /= 50
+            # print 'calibrating imu'
+            if self.imuOffset[0] >= int(self.calibrationCount):
+                for i in range(6):
+                    self.imuOffset[i+1] /= self.calibrationCount
                 self.imuCalibrated = True
                 print 'calibrated'
+            self.initialYawOffset = self.imuOffset[6] - np.pi/2.0
+            if self.initialYawOffset <= -np.pi:
+                self.initialYawOffset += 2.0*np.pi
 
         if (self.imuCalibrated):
             imu = data
             imu.header = Header()
             imu.header.stamp = rospy.Time.now()
             imu.header.frame_id = "imu_link"
-            wx = imu.angular_velocity.x #- self.imuOffset[1]
-            wy = imu.angular_velocity.y #- self.imuOffset[2]
-            wz = imu.angular_velocity.z #- self.imuOffset[3]
-            ax = imu.linear_acceleration.x - self.imuOffset[4]
-            ay = imu.linear_acceleration.y - self.imuOffset[5]
-            az = imu.linear_acceleration.z
+            wx = imu.angular_velocity.x #- self.imuOffset[1] Forward
+            wy = imu.angular_velocity.y #- self.imuOffset[2] Left
+            wz = imu.angular_velocity.z #- self.imuOffset[3] Up
+            ax = imu.linear_acceleration.x - self.imuOffset[4]  # Forward?
+            ay = imu.linear_acceleration.y - self.imuOffset[5] # Left?
+            az = imu.linear_acceleration.z # Up?
             self.imu = imu
-            self.imu.linear_acceleration.x = -ay #-(ay) #-ay #direction of the ENU +ve y-axis
-            self.imu.linear_acceleration.y = -ax # -ax # ax #-ax #direction of the ENU -ve x-axis
+
+            # working
+            # self.imu.linear_acceleration.x = -ay #-(ay) #-ay #direction of the ENU +ve y-axis
+            # self.imu.linear_acceleration.y = -ax # -ax # ax #-ax #direction of the ENU -ve x-axis
+            # self.imu.linear_acceleration.z = az
+            # self.imu.angular_velocity.y = wx
+            # self.imu.angular_velocity.x = -wy
+            # self.imu.angular_velocity.z = wz
+            # q = self.imu.orientation
+            # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+            # self.pub_imu_tf.sendTransform((0,0,0), quaternion_from_euler(euler[1],-euler[0],0), rospy.Time.now(), "imu_link", "base_link")
+
+            # trial
+            self.imu.linear_acceleration.x = -ax #-(ay) #-ay #direction of the ENU +ve y-axis
+            self.imu.linear_acceleration.y = ay # -ax # ax #-ax #direction of the ENU -ve x-axis
             self.imu.linear_acceleration.z = az
-            self.imu.angular_velocity.y = wx
-            self.imu.angular_velocity.x = -wy
+            self.imu.angular_velocity.y = wy
+            self.imu.angular_velocity.x = -wx
             self.imu.angular_velocity.z = wz
             q = self.imu.orientation
             euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-            self.pub_imu_tf.sendTransform((0,0,0), quaternion_from_euler(euler[1],-euler[0],0), rospy.Time.now(), "imu_link", "base_link")
-            # self.imu.orientation.x = 0
-            # self.imu.orientation.y = 0
-            # self.imu.orientation.z = 0
-            # self.imu.orientation.w = 1
+            # print 'self.yaw ', self.yaw
+            # self.pub_imu_tf.sendTransform((0,0,0), quaternion_from_euler(euler[0],euler[1],np.pi/2), rospy.Time.now(), "imu_link", "base_link")
+            self.imu.orientation.x = 0
+            self.imu.orientation.y = 0
+            self.imu.orientation.z = 0
+            self.imu.orientation.w = 0
             self.pub_imu.publish(self.imu)
 
     def setpoint_callback(self, data):
