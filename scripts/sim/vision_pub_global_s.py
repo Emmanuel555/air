@@ -68,6 +68,7 @@ class VisionPosition:
         self.lposX = 0.0
         self.lposY = 0.0
         self.lposZ = 0.0
+        self.imuYaw = 0.0
 
         # cartographer parameters
 
@@ -144,18 +145,17 @@ class VisionPosition:
         self.pub_imu = rospy.Publisher('imu', Imu, queue_size=1)
 
         # rospy parameters
-        self.rate = rospy.Rate(50) # 20hz
-
-
+        self.rate = rospy.Rate(20) # 20hz
 
         while not rospy.is_shutdown():
             try:
                 # get transform from odom -> base_link
                 (self.trans, self.rot) = self.sub_robot_tf.lookupTransform('/odom', '/base_link', rospy.Time(0))
                 #
-                # q = self.rot
-                # euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3])))
-                #
+                q = self.rot
+                euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3])))
+                self.yaw = euler[2]
+                self.publish_odom(self.trans[0], self.trans[1])
                 # print 'initial offset: ', self.initialYawOffset
                 self.transUpdated = True
             except:
@@ -173,19 +173,26 @@ class VisionPosition:
             # self.pub_cmd_vel.publish(self.last_twist)
             if (diff.secs <= 1.0):
                 # print 'cmd_vel: true'
-                rotm = euler_matrix(0, 0, -self.yaw, 'sxyz') # rotm from world enu to map enu
+                yaw = self.initialYawOffset # + self.yaw
+                while (yaw <= -np.pi):
+                    yaw += 2 * np.pi
+                while (yaw >= np.pi):
+                    yaw -= 2 * np.pi
+                rotm = euler_matrix(0, 0, 0, 'sxyz') # rotm from world enu to map enu
                 trans = np.array([self.lpos.x, self.lpos.y, 0])
+                trans = np.dot(rotm[0:3,0:3], trans)
                 self.hover_x = trans[0]
                 self.hover_y = trans[1]
-                self.last_twist.twist.linear.x = 0.1
-                self.last_twist.twist.linear.y = 0.0
-                self.last_twist.twist.linear.z = 0.00
-                self.last_twist.twist.angular.x = 0.0
-                self.last_twist.twist.angular.y = 0.0
-                self.last_twist.twist.angular.z = 0.0
+                # self.last_twist.twist.linear.x = 0.1
+                # self.last_twist.twist.linear.y = 0.0
+                # self.last_twist.twist.linear.z = 0.00
+                # self.last_twist.twist.angular.x = 0.0
+                # self.last_twist.twist.angular.y = 0.0
+                # self.last_twist.twist.angular.z = 0.0
                 self.pub_cmd_vel.publish(self.last_twist)
             else:
                 # print 'cmd_vel: false, hovering in place (x,y): ', self.hover_x, self.hover_y
+                # print 'imu yaw: ', self.imuYaw
                 self.publish_spt(x=self.hover_x, y=self.hover_y)
 
             # self.last_twist_updated = False
@@ -235,7 +242,7 @@ class VisionPosition:
         pos.pose.position.z = z
 
         # For demo purposes we will lock yaw/heading to north.
-        quaternion = quaternion_from_euler(np.pi, 0, np.pi/2+self.imuOffset[6] - np.pi/2.0)
+        quaternion = quaternion_from_euler(np.pi, 0, np.pi/2+self.initialYawOffset)
         pos.pose.orientation = Quaternion(*quaternion)
         pos.header.stamp = rospy.Time.now()
         self.pub_spt.publish(pos)
@@ -285,7 +292,12 @@ class VisionPosition:
         # data.linear.y = 0.3
 
         # cmd_vel received in body frame?
-        rotm = euler_matrix(0, 0, self.yaw, 'sxyz') # rotm from body to world
+        yaw = self.initialYawOffset + self.yaw
+        while (yaw <= -np.pi):
+            yaw += 2 * np.pi
+        while (yaw >= np.pi):
+            yaw -= 2 * np.pi
+        rotm = euler_matrix(0, 0, yaw, 'sxyz') # rotm from body to world
         trans = np.array([data.linear.x, data.linear.y, data.linear.z]) # rot the cmd_vel to world-fixed ENU
 
         # published cmd_vel in world-fixed ENU
@@ -299,50 +311,64 @@ class VisionPosition:
         twist.header = Header()
         twist.header.frame_id = "odom"
 
-        # if there are translation vel and rotation vel, direct pass through to commands
-        if (np.absolute(data.linear.x) >= 0.0001 or np.absolute(data.linear.y) >= 0.0001):
-            # print "cmd vel publisher: trans and rot bypass"
-            twist.twist.linear.x = data.linear.x
-            twist.twist.linear.y = data.linear.y
-            twist.twist.linear.z = 0.0
-            twist.twist.angular.x = 0.0
-            twist.twist.angular.y = 0.0
-            # print data.angular.z
-            twist.twist.angular.z = data.angular.z
+        # print "cmd vel publisher: trans and rot bypass"
+        twist.twist.linear.x = data.linear.x
+        twist.twist.linear.y = data.linear.y
+        twist.twist.linear.z = 0.0
+        twist.twist.angular.x = 0.0
+        twist.twist.angular.y = 0.0
+        # print data.angular.z
+        twist.twist.angular.z = data.angular.z
 
-            # twist.header.stamp = rospy.Time.now()
-            # self.pub_cmd_vel.publish(twist)
-            self.last_twist = twist
-            # self.pub_cmd_vel_attitude.publish(twist)
+        # twist.header.stamp = rospy.Time.now()
+        # self.pub_cmd_vel.publish(twist)
+        self.last_twist = twist
+        # self.pub_cmd_vel_attitude.publish(twist)
 
-        # if only translational command, try to make it rotate on the spot with "flow" feedback
-        elif (np.absolute(data.angular.z) > 0.0001):
-            # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
-            # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
-            # trans = np.dot(rotm[0:3,0:3], trans)
-            # try to hold position while yawing
-            # print "cmd vel publisher: rotating in place"
-            twist.twist.linear.x = -0.8 * self.vx
-            twist.twist.linear.y = -0.8 * self.vy
-            twist.twist.linear.z = 0.00
-            twist.twist.angular.x = 0.0
-            twist.twist.angular.y = 0.0
-            twist.twist.angular.z = data.angular.z
-            self.last_twist = twist
-
-        # if no commands, dun move
-        else:
-            # no cmd_vel
-            # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
-            # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
-            # trans = np.dot(rotm[0:3,0:3], trans)
-            twist.twist.linear.x = 0 #-trans[0]
-            twist.twist.linear.y = 0 #-trans[1]
-            twist.twist.linear.z = 0
-            twist.twist.angular.x = 0
-            twist.twist.angular.y = 0
-            twist.twist.angular.z = 0
-            self.last_twist = twist
+        # # if there are translation vel and rotation vel, direct pass through to commands
+        # if (np.absolute(data.linear.x) >= 0.0001 or np.absolute(data.linear.y) >= 0.0001):
+        #     # print "cmd vel publisher: trans and rot bypass"
+        #     twist.twist.linear.x = data.linear.x
+        #     twist.twist.linear.y = data.linear.y
+        #     twist.twist.linear.z = 0.0
+        #     twist.twist.angular.x = 0.0
+        #     twist.twist.angular.y = 0.0
+        #     # print data.angular.z
+        #     twist.twist.angular.z = data.angular.z
+        #
+        #     # twist.header.stamp = rospy.Time.now()
+        #     # self.pub_cmd_vel.publish(twist)
+        #     self.last_twist = twist
+        #     # self.pub_cmd_vel_attitude.publish(twist)
+        #
+        # # if only translational command, try to make it rotate on the spot with "flow" feedback
+        # elif (np.absolute(data.angular.z) > 0.0001):
+        #     # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
+        #     # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
+        #     # trans = np.dot(rotm[0:3,0:3], trans)
+        #     # try to hold position while yawing
+        #     # print "cmd vel publisher: rotating in place"
+        #     twist.twist.linear.x = -0.8 * self.vx
+        #     twist.twist.linear.y = -0.8 * self.vy
+        #     twist.twist.linear.z = 0.00
+        #     twist.twist.angular.x = 0.0
+        #     twist.twist.angular.y = 0.0
+        #     twist.twist.angular.z = data.angular.z
+        #     self.last_twist = twist
+        #
+        # # if no commands, dun move
+        # else:
+        #     # no cmd_vel
+        #     # rotm = euler_matrix(0, 0, -self.yaw , 'sxyz') # rotation matrix based on yaw offset from initial yaw
+        #     # trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
+        #     # trans = np.dot(rotm[0:3,0:3], trans)
+        #     twist.twist.linear.x = 0 #-trans[0]
+        #     twist.twist.linear.y = 0 #-trans[1]
+        #     twist.twist.linear.z = 0
+        #     twist.twist.angular.x = 0
+        #     twist.twist.angular.y = 0
+        #     twist.twist.angular.z = 0
+        #     self.last_twist = twist
 
         # publish the commands
         # self.last_twist.twist.linear.x = -0.5*self.vx
@@ -357,8 +383,8 @@ class VisionPosition:
         odom.header.frame_id = "odom"
 
         # position should be in map frame, rviz, but not important
-        odom.pose.pose.position.x = 0.0
-        odom.pose.pose.position.y = 0.0
+        odom.pose.pose.position.x = x
+        odom.pose.pose.position.y = y
         odom.pose.pose.position.z = 0.0
         odom_quat = quaternion_from_euler(0, 0, 0)
         odom.pose.pose.orientation = Quaternion(*odom_quat)
@@ -367,21 +393,29 @@ class VisionPosition:
         q = self.rot
         euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3])))
         # print 'map yaw: ', euler[2]
-        yaw = self.initialYawOffset + euler[2]
-        if yaw >= np.pi:
-            yaw -= 2.0*np.pi
-        if yaw <= -np.pi:
-            yaw += 2.0*np.pi
-        print "self.intialYawOffset: ", self.initialYawOffset
-        print "yaw: ", yaw
+        # yaw = self.initialYawOffset + euler[2]
+        # if yaw >= np.pi:
+        #     yaw -= 2.0*np.pi
+        # if yaw <= -np.pi:
+        #     yaw += 2.0*np.pi
+        # print "self.intialYawOffset: ", self.initialYawOffset
+        # print "yaw: ", yaw
+        yaw = self.initialYawOffset + self.yaw
+        while (yaw <= -np.pi):
+            yaw += 2 * np.pi
+        while (yaw >= np.pi):
+            yaw -= 2 * np.pi
+        # print 'yaw: ', yaw
         rotm = euler_matrix(0, 0, -yaw, 'sxyz') # rotation matrix based on yaw offset from initial yaw
-
+        # self.vx = 1.0
+        # self.vy = 0.0
+        # self.vz = 0.0
         trans = np.array([self.vx, self.vy, self.vz]) # rotated from earth-fixed ENU to rviz body-fixed velocity
         trans = np.dot(rotm[0:3,0:3], trans)
         odom.twist.twist.linear.x = trans[0]
         odom.twist.twist.linear.y = trans[1]
         # odom.twist.twist.linear.z = trans[2]
-        # odom.twist.twist.angular.z = self.wz
+        odom.twist.twist.angular.z = self.wz
 
         odom.child_frame_id = "base_link"
         self.odom.publish(odom)
@@ -418,12 +452,19 @@ class VisionPosition:
             # using carto mag
             # yaw = -(-euler[2]+np.pi/2)
 
-            q = self.imuYawQ
+            q = self.rot
             # print 'imuYawQ: ', q
-            euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-            yaw = euler[2] - np.pi/2.0
-            if yaw <= -np.pi:
-                yaw += 2.0*np.pi
+            euler = np.array(euler_from_quaternion((q[0], q[1], q[2], q[3]))) # to get pitch and roll
+
+            # yaw = self.imuYaw - np.pi/2.0 # euler[2] #- np.pi/2.0
+            yaw = self.initialYawOffset + self.yaw
+            while (yaw <= -np.pi):
+                yaw += 2 * np.pi
+            while (yaw >= np.pi):
+                yaw -= 2 * np.pi
+            # print 'yaw: ', yaw
+            # if yaw <= -np.pi:
+            #     yaw += 2.0*np.pi
             # print 'yaw offset initial: ', self.imuOffset[6] - np.pi/2.0
             # self.yaw = np.mod(euler[2]+np.pi - self.imuOffset[6], 2*np.pi)
             # self.yaw = self.yaw - np.pi
@@ -439,9 +480,9 @@ class VisionPosition:
             # pos.pose.position.x = -self.errorDy
 
             # self.rotm = euler_matrix(0, 0, euler[2]-np.pi/2, 'sxyz')
-            self.rotm = euler_matrix(0, 0, self.yaw, 'sxyz')
+            self.rotm = euler_matrix(0, 0, yaw, 'sxyz')
             trans = np.dot(self.rotm[0:3,0:3], self.trans)
-            self.errorDy = -trans[1] # rotate from cartoY in the body frame to earth-fixed frame
+            self.errorDy = trans[1] # rotate from cartoY in the body frame to earth-fixed frame
             self.errorDx = trans[0] # cartoX in the body frame
 
             self.transUpdated = False
@@ -484,7 +525,7 @@ class VisionPosition:
             pos.header.stamp = rospy.Time.now()
             self.pub_lpe.publish(pos)
             # self.publish_odom(self.trans[0], self.trans[1])
-            self.publish_odom(self.trans[0], self.trans[1])
+
 
     def reinit_pose(self, msg):
         if msg.data >= 1:
@@ -504,9 +545,12 @@ class VisionPosition:
         self.imuYawQ.w = data.orientation.w
         euler_raw = euler_from_quaternion((self.imuYawQ.x, self.imuYawQ.y,self.imuYawQ.z,self.imuYawQ.w))
         tmp_yaw = euler_raw[2]# make it same as gazebo but doesn't really matter
-        self.yaw = euler_raw[2] - np.pi/2.0
-        if self.yaw <= -np.pi:
-            self.yaw += 2.0*np.pi
+        self.imuYaw = tmp_yaw - np.pi/2.0
+        # print 'self.imuYaw: ', self.imuYaw
+        # print 'self.imuOffset: ', self.initialYawOffset
+        # self.yaw = euler_raw[2] - np.pi/2.0
+        # if self.yaw <= -np.pi:
+        #     self.yaw += 2.0*np.pi
 
         if (self.imuCalibrated == False and self.imuOffset[0] <= int(self.calibrationCount)):
             self.imuOffset[1] += data.angular_velocity.x
@@ -523,8 +567,8 @@ class VisionPosition:
                 self.imuCalibrated = True
                 print 'calibrated'
             self.initialYawOffset = self.imuOffset[6] - np.pi/2.0
-            if self.initialYawOffset <= -np.pi:
-                self.initialYawOffset += 2.0*np.pi
+            # if self.initialYawOffset <= -np.pi:
+            #     self.initialYawOffset += 2.0*np.pi
 
         if (self.imuCalibrated):
             imu = data
@@ -533,7 +577,7 @@ class VisionPosition:
             imu.header.frame_id = "imu_link"
             wx = imu.angular_velocity.x #- self.imuOffset[1] Forward
             wy = imu.angular_velocity.y #- self.imuOffset[2] Left
-            wz = imu.angular_velocity.z #- self.imuOffset[3] Up
+            wz = imu.angular_velocity.z #- self.imuOffset[3] #Up
             ax = imu.linear_acceleration.x - self.imuOffset[4]  # Forward?
             ay = imu.linear_acceleration.y - self.imuOffset[5] # Left?
             az = imu.linear_acceleration.z # Up?
