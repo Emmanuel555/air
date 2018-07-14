@@ -13,17 +13,19 @@ from teraranger_array.msg import RangeArray
 # simple class to contain the node's variables and code
 class CentroidFinder:     # class constructor; subscribe to topics and advertise intent to publish
 
-    def __init__(self, v0 = np.array([1,1]), v1 = np.array([-1,-1]), v2 = np.array([1,-1]), v3 = np.array([-1,1]), v4 = np.array([1,0]), v5 = np.array([-1,0]), debug=False ):
+    def __init__(self, v0 = np.array([1,1]), v1 = np.array([-1,-1]), v2 = np.array([1,-1]), v3 = np.array([-1,1]), v4 = np.array([1,0]), v5 = np.array([-1,0]), v6 = np.array([1, 1]), v7 = np.array([1,1]), debug=False ):
 
         self.v0 = v0
         self.v1 = v1
         self.v2 = v2
         self.v3 = v3
-        self.v4 = v3
-        self.v5 = v3
+        self.v4 = v4
+        self.v5 = v5
+        self.v6 = v6
+        self.v7 = v7
         self.debug = debug
-        self.roll = 0
-        self.pitch = 0
+        self.roll = 0.0
+        self.pitch = 0.0
         self.M = np.array([[87, 131, 70, 112.5],
         [58.5, 94.5, 51, 84],
         [60.5, 92.5, 52, 84.5],
@@ -32,20 +34,22 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [141.5, 89.5, 134, 83]])
         self.M = self.M/100
 
-        self.updated = [False, False, False, False, False, False]
-        self.orient = [-np.pi/4, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2,  np.pi/4]
-        self.offset = np.array([[0.2615, -0.154, 0],
-        [0.2130, -0.1690, 0],
-        [-0.2130, -0.1690, 0],
-        [-0.2130, 0.1690, 0],
-        [0.2130, 0.1690, 0],
-        [0.2615, 0.1540, 0]])
+        self.updated = [False, False, False, False, False, False, False, False]
+        self.orient = [-np.pi/2 + np.pi/5.29, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi + np.pi/5.29, np.pi - np.pi/5.29, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/5.29]
+        self.offset = np.array([[0.094, -0.047, 0],
+        [0.011, -0.047, 0],
+        [-0.011, -0.047, 0],
+        [-0.094, -0.047, 0],
+        [-0.094, 0.047, 0],
+        [-0.011, 0.047, 0],
+        [0.011, 0.047, 0],
+        [0.094, 0.047, 0]])
 
-        self.update_rate = 20
+        self.update_rate = 15
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        rospy.Subscriber("teraranger_hub_one", RangeArray, self.updatePolygonVertex, queue_size=1)
+        rospy.Subscriber("ranges", RangeArray, self.updatePolygonVertex, queue_size=1)
         # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
         # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
         # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
@@ -114,18 +118,18 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
-        sensorCount = 6
+        sensorCount = 8
         for i in range(sensorCount):
             v = ranges[i].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
-            v = self.sensorComp(v,i)
+            #v = self.sensorComp(v,i)
             self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
         v = msg
-        v_min = 200/1000
-        v_max = 14
+        v_min = 50.0/1000.0
+        v_max = 2.0
         if (v < v_min or v > v_max):
             return False
         if index == 0:
@@ -164,6 +168,18 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             if debug == True:
                 print '\n teraranger: ', index, '\t distance: ', v
                 print '\n teraranger: ', index, '\t distance: ', self.v5
+        elif index == 6:
+            self.v6 = self.offset[index, 0:2] + self.rotate(v, self.orient[6])
+            self.updated[6] = True
+            if debug == True:
+                print '\n teraranger: ', index, '\t distance: ', v
+                print '\n teraranger: ', index, '\t distance: ', self.v6
+        elif index == 7:
+            self.v7 = self.offset[index, 0:2] + self.rotate(v, self.orient[7])
+            self.updated[7] = True
+            if debug == True:
+                print '\n teraranger: ', index, '\t distance: ', v
+                print '\n teraranger: ', index, '\t distance: ', self.v7
 
     def rotate(self, r, angle):
         x = r * np.cos(angle)
@@ -229,19 +245,35 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if (debug):
             print 'v5', v5
 
+        B = np.array([self.v6[0], self.v6[1], 0])
+        v6 = self.projectSubspace(A, B)
+        v6 = np.dot(rotm[0:3,0:3], v6)
+        if (debug):
+            print 'v6', v6
+
+        B = np.array([self.v7[0], self.v7[1], 0])
+        v7 = self.projectSubspace(A, B)
+        v7 = np.dot(rotm[0:3,0:3], v7)
+        if (debug):
+            print 'v7', v7
+
         A = np.array([[v0[0], -1, 0],
         [v1[0], -1, 0],
         [v2[0], -1, 0],
-        [v3[0], 0, -1],
+        [v3[0], -1, 0],
         [v4[0], 0, -1],
-        [v5[0], 0, -1]])
+        [v5[0], 0, -1],
+        [v6[0], 0, -1],
+        [v7[0], 0, -1]])
 
         B = np.array([[-v0[1]],
         [-v1[1]],
         [-v2[1]],
         [-v3[1]],
         [-v4[1]],
-        [-v5[1]]])
+        [-v5[1]],
+        [-v6[1]],
+        [-v7[1]]])
 
         # A = np.array([[self.v0[0], -1, 0],
         # [self.v1[0], -1, 0],
@@ -263,6 +295,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.updated[3] = False
         self.updated[4] = False
         self.updated[5] = False
+        self.updated[6] = False
+        self.updated[7] = False
 
         # At = A.transpose()
         #
