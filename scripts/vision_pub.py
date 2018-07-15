@@ -38,7 +38,7 @@ from mavros import setpoint as SP
 from std_msgs.msg import Header
 from std_msgs.msg import Float64, Float32
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
-from tf.transformations import quaternion_from_euler, euler_from_quaternion
+from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_multiply, quaternion_about_axis
 from mavros_msgs.srv import CommandLong
 from mavros_msgs.msg import PositionTarget, RCIn
 from sensor_msgs.msg import NavSatFix, Range, LaserScan
@@ -121,6 +121,8 @@ class VisionPosition:
             self.error_updated[0] = False
             self.error_updated[1] = False
             pos = PoseStamped()
+            # pose shud be in east (x), north (y), up (z)
+            # but lsq is in north (x), west (y), up(z)
             pos.header = self.local_position.header #Header()
             pos.header.frame_id = "local_origin"
             ## pixhawk is using NED convention i.e. x (front/north), y (right,east), z(down)
@@ -128,8 +130,8 @@ class VisionPosition:
             #pos.pose.position.x = errorDx
             #pos.pose.position.y = self.errorDy
             #pos.pose.position.z = self.z
-            pos.pose.position.y = -errorDx
-            pos.pose.position.x = self.errorDy
+            pos.pose.position.y = errorDx
+            pos.pose.position.x = -self.errorDy
             # pos.pose.position.x = pos.pose.position.x - self.fakeY #to activate slider
             pos.pose.position.z = self.z
 
@@ -141,7 +143,14 @@ class VisionPosition:
             # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
             #q = quaternion_from_euler(0, 0, -self.errorDz+np.pi/2)
             #self.errorDz = np.pi/4
-            q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
+            q = quaternion_from_euler(self.roll, self.pitch, self.errorDz) #x,y,z, 'zyx order' #this shud be in enu
+            aircraft_baselink_q = quaternion_about_axis(np.pi, (1,0,0))
+            ned_enu_qz = quaternion_about_axis(np.pi/2, (0,0,1))
+            ned_enu_qx = quaternion_about_axis(np.pi, (1,0,0))
+            rot_q = quaternion_multiply(ned_enu_qx, ned_enu_qz)
+            rot_q = quaternion_multiply(aircraft_baselink_q, rot_q)
+            q   = quaternion_multiply(rot_q, q)
+
             pos.pose.orientation.x = q[0]
             pos.pose.orientation.y = q[1]
             pos.pose.orientation.z = q[2]

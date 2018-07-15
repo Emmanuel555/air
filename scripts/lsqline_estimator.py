@@ -7,7 +7,7 @@ from std_msgs.msg import Float32
 from sensor_msgs.msg import Range, LaserScan
 from rospy.numpy_msg import numpy_msg
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
-from tf.transformations import quaternion_from_euler, euler_from_quaternion, euler_matrix
+from tf.transformations import quaternion_from_euler, euler_from_quaternion, euler_matrix, quaternion_about_axis, quaternion_multiply
 from teraranger_array.msg import RangeArray
 
 # simple class to contain the node's variables and code
@@ -34,8 +34,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [141.5, 89.5, 134, 83]])
         self.M = self.M/100
 
-        self.updated = [False, False, False, False, False, False, False, False]
-        self.orient = [-np.pi/2 + np.pi/5.29, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi + np.pi/5.29, np.pi - np.pi/5.29, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/5.29]
+        self.updated = np.array([False, False, False, False, False, False, False, False])
+        self.orient = [-np.pi/2 + np.pi/5.29, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi/2 - np.pi/5.29, np.pi/2 + np.pi/5.29, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/5.29]
         self.offset = np.array([[0.094, -0.047, 0],
         [0.011, -0.047, 0],
         [-0.011, -0.047, 0],
@@ -45,7 +45,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.011, 0.047, 0],
         [0.094, 0.047, 0]])
 
-        self.update_rate = 15
+        self.update_rate = 15.0
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
@@ -57,9 +57,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
         # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
 
-        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
-        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
-        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1)
+        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1) #front
+        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1) #left
+        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1) #up
         self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
         self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
 
@@ -71,7 +71,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
             #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
-            self.lsqline_pub()
+            if (np.size(np.flatnonzero(self.updated[0:4]) > 2) and np.size(np.flatnonzero(self.updated[4:8]) > 2)):
+                self.lsqline_pub()
             rate.sleep()
 
     def sensorComp(self, old, i):
@@ -107,14 +108,27 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
     def updateRPY(self, data, debug=False):
         local_position = data
         q = local_position.pose.orientation
-        euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
+        # print 'q ', q
+        origin, xaxis, yaxis, zaxis = (0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)
+        qx = quaternion_about_axis(np.pi/2, zaxis)
+        q_ned = quaternion_multiply(qx, [q.x, q.y, q.z, q.w])
+        qx = quaternion_about_axis(np.pi, zaxis)
+        q_ned = quaternion_multiply(qx, q_ned)
+
+        euler = np.array(euler_from_quaternion((q_ned[0], q_ned[1], q_ned[2], q_ned[3]))) # this is in ENU
+        # rotm = euler_matrix(np.pi, 0, 0, 'sxyz')
+        # euler = np.dot(rotm[0:3,0:3], euler)
+        # rotm = euler_matrix(0, 0, np.pi/2, 'sxyz')
+        # euler = np.dot(rotm[0:3,0:3], euler)
+
         self.roll = euler[0] #offset of 1 deg
-        self.pitch = euler[1]
+        self.pitch = -euler[1]
         self.errorDr_pub.publish(self.roll)
         self.errorDp_pub.publish(self.pitch)
 
         if debug or self.debug:
-            print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
+            print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -euler[2]#-(euler[2]-np.pi/2)
+            # print 'quat: ', q
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
@@ -274,6 +288,16 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [-v5[1]],
         [-v6[1]],
         [-v7[1]]])
+
+        # here we selected only the updated points by selecting only the subset of updated points
+        # if (np.size(np.flatnonzero(self.updated[0:4]) > 2) and np.size(np.flatnonzero(self.updated[4:8]) > 2)):
+        A = A[np.flatnonzero(self.updated)]
+        B = B[np.flatnonzero(self.updated)]
+
+        if (debug):
+            print 'A ', A
+            print 'B ', B
+            print 'updated ', self.updated
 
         # A = np.array([[self.v0[0], -1, 0],
         # [self.v1[0], -1, 0],
