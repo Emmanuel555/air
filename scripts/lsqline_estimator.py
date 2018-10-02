@@ -137,7 +137,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
     def updatePolygonVertex_old(self, msg, index, debug=False):
         v = msg
         v_min = 20.0/1000.0
-        v_max = 5.0
+        v_max = 14.0
         if (v < v_min or v > v_max):
             return False
         if index == 0:
