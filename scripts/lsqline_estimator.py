@@ -3,7 +3,7 @@
 import rospy
 import numpy as np
 
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 from sensor_msgs.msg import Range, LaserScan
 from rospy.numpy_msg import numpy_msg
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
@@ -26,30 +26,36 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.debug = debug
         self.roll = 0.0
         self.pitch = 0.0
-        self.M = np.array([[87, 131, 70, 112.5],
-        [58.5, 94.5, 51, 84],
-        [60.5, 92.5, 52, 84.5],
-        [94, 60.5, 86, 53.5],
-        [91, 57.5, 89.5, 56.5],
-        [141.5, 89.5, 134, 83]])
+        self.M = np.array([[44.80, 142.8, 47.54, 138],
+        [45.40, 134.7, 45.19, 131],
+        [45.40, 129.0, 45.19, 131],
+        [50.97, 118.2, 47.54, 119],
+        [49.40, 119.2, 47.57, 119],
+        [50.23, 125.6, 45.19, 122],
+        [40.57, 119.8, 45.19, 122],
+        [47.93, 136.9, 47.54, 138]])
         self.M = self.M/100
 
-        self.updated = [False, False, False, False, False, False, False, False]
-        self.orient = [-np.pi/2 + np.pi/5.29, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi + np.pi/5.29, np.pi - np.pi/5.29, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/5.29]
-        self.offset = np.array([[0.094, -0.047, 0],
-        [0.011, -0.047, 0],
-        [-0.011, -0.047, 0],
-        [-0.094, -0.047, 0],
-        [-0.094, 0.047, 0],
-        [-0.011, 0.047, 0],
-        [0.011, 0.047, 0],
-        [0.094, 0.047, 0]])
+        self.updated = np.array([False, False, False, False, False, False, False, False])
+        # FLU
+        self.orient = [-np.pi/2 + np.pi/2.25, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi/2 - np.pi/2.25, np.pi/2 + np.pi/2.25, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/2.25]
+        self.remap = [6, 5, 4, 3, 2, 1, 0, 7]
+        # coordinate system?
+        # XYZ - FLU
+        self.offset = np.array([[0.08565, -0.03456, 0],
+        [0.03333, -0.05809, 0],
+        [-0.01433, -0.05809, 0],
+        [-0.21079, -0.03456, 0],
+        [-0.21079, 0.03456, 0],
+        [-0.01433, 0.05809, 0],
+        [0.03333, 0.05809, 0],
+        [0.08565, 0.03456, 0]])
 
-        self.update_rate = 15
+        self.update_rate = 10
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        rospy.Subscriber("ranges", RangeArray, self.updatePolygonVertex, queue_size=1)
+        rospy.Subscriber("hub_1/ranges_raw", RangeArray, self.updatePolygonVertex, queue_size=1)
         # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
         # rospy.Subscriber("teraranger2/laser/scan", LaserScan, self.updatePolygonVertex, 1)
         # rospy.Subscriber("teraranger3/laser/scan", LaserScan, self.updatePolygonVertex, 2)
@@ -62,6 +68,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1)
         self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
         self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
+        self.resultLSQ_pub = rospy.Publisher("resultLSQ", Float32MultiArray, queue_size=1)
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
 
@@ -120,16 +127,17 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         ranges = msg.ranges
         sensorCount = 8
         for i in range(sensorCount):
-            v = ranges[i].range
+            j = self.remap[i]
+            v = ranges[j].range
             if (debug):
                 print 'teraranger' , i, 'distance ', v
-            #v = self.sensorComp(v,i)
+            v = self.sensorComp(v,i)
             self.updatePolygonVertex_old(v, i)
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
         v = msg
-        v_min = 50.0/1000.0
-        v_max = 2.0
+        v_min = 20.0/1000.0
+        v_max = 5.0
         if (v < v_min or v > v_max):
             return False
         if index == 0:
@@ -275,6 +283,30 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [-v6[1]],
         [-v7[1]]])
 
+        #weights
+        # w = np.array([[v0[0]],
+        # [v1[0]],
+        # [v2[0]],
+        # [v3[0]],
+        # [v4[0]],
+        # [v5[0]],
+        # [v6[0]],
+        # [v7[0]]])
+        w = np.array([[1.4],
+        [0.26],
+        [0.26],
+        [1.4],
+        [1.4],
+        [0.26],
+        [0.26],
+        [1.4]])
+        w = np.exp(-np.square(w))
+        # w = np.sqrt(abs(w))
+
+        # print w
+        A = A * w
+        B = B * w
+
         # A = np.array([[self.v0[0], -1, 0],
         # [self.v1[0], -1, 0],
         # [self.v2[0], -1, 0],
@@ -289,6 +321,14 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [-self.v4[1]],
         # [-self.v5[1]]])
 
+        updated = np.copy(self.updated)
+        # print updated
+        # print 'ranges: ', (self.v0, self.v1, self.v2, self.v3, self.v4, self.v5, self.v6, self.v7)
+        A = A[updated, ...] #mask outdated values
+        B = B[updated, ...] #mask outdated values
+        # print 'A: ', A
+        # print 'B: ', B
+
         self.updated[0] = False
         self.updated[1] = False
         self.updated[2] = False
@@ -301,29 +341,35 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # At = A.transpose()
         #
         # x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
+        # print updated
+        if (sum(updated[1:4]) >= 3):
 
-        x = np.linalg.lstsq(A,B)[0];
+            x = np.linalg.lstsq(A,B)[0];
 
-        alpha = np.arctan(x[0])
-        rR = x[1] * np.cos(alpha)
-        rL = x[2] * np.cos(alpha)
+            alpha = np.arctan(x[0])
+            rR = x[1] * np.cos(alpha)
+            rL = x[2] * np.cos(alpha)
 
-        width = abs(rL) + abs(rR)
-        dy = (width/2) - rL
-        dx = 0
+            res = Float32MultiArray()
+            res.data = [rL, rR, alpha]
 
-        if self.debug or debug:
-            print 'rL: \t', rL
-            print 'rR: \t', rR
-            print 'yaw: \t', alpha
-            print 'centre: \t', dy
-            #print 'A: \t', A
-            #print 'B: \t', B
-            print 'x: \t', x
+            width = abs(rL) + abs(rR)
+            dy = (width/2) - rL
+            dx = 0
 
-        self.errorDx_pub.publish(dx)
-        self.errorDy_pub.publish(dy)
-        self.errorDz_pub.publish(alpha)
+            if self.debug or debug:
+                print 'rL: \t', rL
+                print 'rR: \t', rR
+                print 'yaw: \t', alpha
+                print 'centre: \t', dy
+                #print 'A: \t', A
+                #print 'B: \t', B
+                print 'x: \t', x
+
+            self.errorDx_pub.publish(dx)
+            self.errorDy_pub.publish(dy)
+            self.errorDz_pub.publish(alpha)
+            self.resultLSQ_pub.publish(res)
 
 
 if __name__ == "__main__":
