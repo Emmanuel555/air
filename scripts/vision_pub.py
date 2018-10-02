@@ -37,7 +37,7 @@ from mavros.param import *
 from mavros import setpoint as SP
 from std_msgs.msg import Header
 from std_msgs.msg import Float64, Float32
-from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
+from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped, Point
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from mavros_msgs.srv import CommandLong
 from mavros_msgs.msg import PositionTarget, RCIn
@@ -106,6 +106,7 @@ class VisionPosition:
         # self.filterDy = 0
 
         while not rospy.is_shutdown():
+            # print 'running'
 
             self.rate.sleep()
             self.lpe(self.errorDx)
@@ -117,35 +118,48 @@ class VisionPosition:
     #
 
     def lpe(self, errorDx):
+
+        # forward left up: = [ self.errorDx, self.errorDy, self.z ]
+        # east north up: [-self.errorDy, self.errorDx, self.z]
+
         if (self.error_updated[0] == True and self.error_updated[1] == True):
             self.error_updated[0] = False
             self.error_updated[1] = False
             pos = PoseStamped()
             pos.header = self.local_position.header #Header()
             pos.header.frame_id = "local_origin"
-            ## pixhawk is using NED convention i.e. x (front/north), y (right,east), z(down)
-            ## however lsq x-y-z is left, front, down
-            #pos.pose.position.x = errorDx
-            #pos.pose.position.y = self.errorDy
-            #pos.pose.position.z = self.z
-            pos.pose.position.y = -errorDx
-            pos.pose.position.x = self.errorDy
-            # pos.pose.position.x = pos.pose.position.x - self.fakeY #to activate slider
-            pos.pose.position.z = self.z
 
-            # For demo purposes we will lock yaw/heading to north.
-            q = self.local_position.pose.orientation
-            # print q
-            # euler[2] = self.errorDz
-            # print q
-            # euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
-            #q = quaternion_from_euler(0, 0, -self.errorDz+np.pi/2)
-            #self.errorDz = np.pi/4
-            q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
-            pos.pose.orientation.x = q[0]
-            pos.pose.orientation.y = q[1]
-            pos.pose.orientation.z = q[2]
-            pos.pose.orientation.w = q[3]
+            ## mavros sends pos at ENU
+            pos.pose.position = Point(-self.errorDy, errorDx, self.z)
+            # pos.pose.position.x = self.errorDy
+            # pos.pose.position.y = errorDx
+            # pos.pose.position.x = pos.pose.position.x - self.fakeY #to activate slider
+            # pos.pose.position.z = self.z
+
+            # print 'enu (xyz): ', pos.pose.position
+
+            # base link enu i.e. flu
+            # q = self.local_position.pose.orientation
+            # same as self.local_position.pose.orientation
+            # we need to substract pi/2 from the number, as 0 is east. we want tunnel axis as north
+            q = quaternion_from_euler(self.roll, self.pitch, self.errorDz + np.pi/2)
+
+            # yaw rotation from tunnel axis
+            # baselink_rotation = quaternion_from_euler(0.0, 0.0, )
+            # q = q * baselink_rotation
+            # print 'q: ', q
+            # print 'baselink_rotation: ', baselink_rotation
+
+            # base link enu i.e. flu
+            # q = quaternion_from_euler(np.pi+self.roll, self.pitch, np.pi/2+self.errorDz) #x,y,z, 'zyx order'
+            # pos.pose.orientation.x = q[0]
+            # pos.pose.orientation.y = q[1]
+            # pos.pose.orientation.z = q[2]
+            # pos.pose.orientation.w = q[3]
+
+            # these needs to be in enu base_link
+            pos.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
+            # print 'flu (rpy): ', euler_from_quaternion([q[0], q[1], q[2], q[3]])
             #pos.pose.orientation.x = q[0]
             #pos.pose.orientation.y = q[1]
             #pos.pose.orientation.z = q[3]
