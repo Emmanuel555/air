@@ -26,6 +26,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.debug = debug
         self.roll = 0.0
         self.pitch = 0.0
+        self.forward = 0.0
         self.M = np.array([[44.80, 142.8, 47.54, 138],
         [45.40, 134.7, 45.19, 131],
         [45.40, 129.0, 45.19, 131],
@@ -77,6 +78,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         while not rospy.is_shutdown():
             # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
+            self.publishRPY()
             #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
             self.lsqline_pub()
             rate.sleep()
@@ -113,15 +115,22 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
     def updateRPY(self, data, debug=False):
         local_position = data
+        self.forward = 0.1 * local_position.pose.position.y
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
         self.roll = euler[0] #offset of 1 deg
         self.pitch = euler[1]
-        self.errorDr_pub.publish(self.roll)
-        self.errorDp_pub.publish(self.pitch)
+
+        # self.publishRPY()
+        # self.errorDr_pub.publish(self.roll)
+        # self.errorDp_pub.publish(self.pitch)
 
         if debug or self.debug:
             print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
+
+    def publishRPY(self, debug=False):
+        self.errorDr_pub.publish(self.roll)
+        self.errorDp_pub.publish(self.pitch)
 
     def updatePolygonVertex(self, msg, debug=False):
         ranges = msg.ranges
@@ -292,14 +301,14 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [v5[0]],
         # [v6[0]],
         # [v7[0]]])
-        w = np.array([[1.4],
+        w = np.array([[100],
         [0.26],
         [0.26],
-        [1.4],
-        [1.4],
+        [100],
+        [100],
         [0.26],
         [0.26],
-        [1.4]])
+        [100]])
         w = np.exp(-np.square(w))
         # w = np.sqrt(abs(w))
 
@@ -342,7 +351,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         #
         # x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
         # print updated
-        if (sum(updated[1:4]) >= 3):
+        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= 4):
 
             x = np.linalg.lstsq(A,B)[0];
 
@@ -355,7 +364,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
             width = abs(rL) + abs(rR)
             dy = (width/2) - rL
-            dx = 0
+            dx = self.forward
 
             if self.debug or debug:
                 print 'rL: \t', rL
