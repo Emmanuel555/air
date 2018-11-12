@@ -2,6 +2,7 @@
 
 import rospy
 import numpy as np
+import low_pass
 
 from std_msgs.msg import Float32, Float32MultiArray
 from sensor_msgs.msg import Range, LaserScan
@@ -9,6 +10,7 @@ from rospy.numpy_msg import numpy_msg
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, euler_matrix
 from teraranger_array.msg import RangeArray
+
 
 # simple class to contain the node's variables and code
 class CentroidFinder:     # class constructor; subscribe to topics and advertise intent to publish
@@ -27,6 +29,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.roll = 0.0
         self.pitch = 0.0
         self.forward = 0.0
+
         self.M = np.array([[44.80, 142.8, 47.54, 138],
         [45.40, 134.7, 45.19, 131],
         [45.40, 129.0, 45.19, 131],
@@ -52,9 +55,25 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [0.03333, 0.05809, 0],
         [0.08565, 0.03456, 0]])
 
-        self.update_rate = 10
+        self.update_rate = 25.0
+
+        # saves precious computation by calculating only when sufficient ranges are valid
+        self.publishByValid = False
+        # control publishing rate
+        self.publishTimeNow = rospy.Time.now()
+        self.publishTimeLast = rospy.Time.now()
+        self.publishInterval = 1.0 / self.update_rate
 
         self.bodyXYZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+        self.lpfilt = [low_pass.lowpassfilter(1.0/self.update_rate, 0.01) for i in range(8)]
+
+        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
+        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
+        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1)
+        self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
+        self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
+        self.resultLSQ_pub = rospy.Publisher("resultLSQ", Float32MultiArray, queue_size=1)
 
         rospy.Subscriber("hub_1/ranges_raw", RangeArray, self.updatePolygonVertex, queue_size=1)
         # rospy.Subscriber("teraranger1/laser/scan", LaserScan, self.updatePolygonVertex, 0)
@@ -64,23 +83,19 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
         # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
 
-        self.errorDx_pub = rospy.Publisher("error_dx", Float32, queue_size=1)
-        self.errorDy_pub = rospy.Publisher("error_dy", Float32, queue_size=1)
-        self.errorDz_pub = rospy.Publisher("error_dz", Float32, queue_size=1)
-        self.errorDr_pub = rospy.Publisher("roll", Float32, queue_size=1)
-        self.errorDp_pub = rospy.Publisher("pitch", Float32, queue_size=1)
-        self.resultLSQ_pub = rospy.Publisher("resultLSQ", Float32MultiArray, queue_size=1)
+
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
 
         rate = rospy.Rate(self.update_rate)
 
         while not rospy.is_shutdown():
-            # if (self.updated[0]==True and self.updated[1]==True and self.updated[2]==True and self.updated[3]==True):
             self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
             self.publishRPY()
-            #self.bodyXYZ = self.bodyRotation(-0, -np.pi/6)
-            self.lsqline_pub()
+            # self.bodyXYZ = self.bodyRotation(-self.pitch, -self.roll) #update the body rotation matrix
+            # self.publishRPY()
+            # if (self.publish):
+            #     self.lsqline_pub(np.copy(self.updated))
             rate.sleep()
 
     def sensorComp(self, old, i):
@@ -91,7 +106,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         new = X[0]*old + X[1]
         return new
 
-    def bodyRotation(self, pitch, roll, debug=False):
+    def bodyRotation(self, pitch, roll, debug = False):
         bodyXYZ = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0], [0, 0, 0, 1]])
         rotmZ = euler_matrix(0,0,0,'sxyz')
         bodyX1Y1Z1 = np.dot(rotmZ, bodyXYZ)
@@ -115,7 +130,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
     def updateRPY(self, data, debug=False):
         local_position = data
-        self.forward = 0.1 * local_position.pose.position.y
+        self.forward = 0.0 #0.1 * local_position.pose.position.y
         q = local_position.pose.orientation
         euler = np.array(euler_from_quaternion((q.x, q.y, q.z, q.w)))
         self.roll = euler[0] #offset of 1 deg
@@ -129,10 +144,11 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'roll ', self.roll, '\t pitch ', self.pitch, '\t yaw ', -(euler[2]-np.pi/2)
 
     def publishRPY(self, debug=False):
-        self.errorDr_pub.publish(self.roll)
-        self.errorDp_pub.publish(self.pitch)
+        self.errorDr_pub.publish(1.0*self.roll)
+        self.errorDp_pub.publish(1.0*self.pitch)
 
     def updatePolygonVertex(self, msg, debug=False):
+        self.updated = np.array([False, False, False, False, False, False, False, False])
         ranges = msg.ranges
         sensorCount = 8
         for i in range(sensorCount):
@@ -141,62 +157,80 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             if (debug):
                 print 'teraranger' , i, 'distance ', v
             v = self.sensorComp(v,i)
+            # v = self.medfilt[i].update_filter(v)
             self.updatePolygonVertex_old(v, i)
+
+        updated = np.copy(self.updated)
+        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= 4):
+            self.publishByValid = True
+        # print sum([updated[1], updated[2], updated[5], updated[6]]), self.publishByValid
+        self.publishTimeNow = rospy.Time.now()
+        delta = self.publishTimeNow - self.publishTimeLast # from last published time
+        # print delta.to_sec(), 0.8/self.update_rate
+        publishByTime = delta.to_sec() > (0.8 * (1.0/self.update_rate)) #self.publishInterval
+        if debug:
+            print delta.to_sec(), (1.0/self.update_rate)
+        if (self.publishByValid and publishByTime):
+            self.lsqline_pub(updated)
+            self.publishTimeLast = self.publishTimeNow
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
         v = msg
         v_min = 20.0/1000.0
         v_max = 14.0
-        if (v < v_min or v > v_max):
-            return False
-        if index == 0:
-            self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
-            self.updated[0] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v0
-        elif index == 1:
-            self.v1 = self.offset[index, 0:2] + self.rotate(v, self.orient[1])
-            self.updated[1] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v1
-        elif index == 2:
-            self.v2 = self.offset[index, 0:2] + self.rotate(v, self.orient[2])
-            self.updated[2] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v2
-        elif index == 3:
-            self.v3 = self.offset[index, 0:2] + self.rotate(v, self.orient[3])
-            self.updated[3] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v3
-        elif index == 4:
-            self.v4 = self.offset[index, 0:2] + self.rotate(v, self.orient[4])
-            self.updated[4] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v4
-        elif index == 5:
-            self.v5 = self.offset[index, 0:2] + self.rotate(v, self.orient[5])
-            self.updated[5] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v5
-        elif index == 6:
-            self.v6 = self.offset[index, 0:2] + self.rotate(v, self.orient[6])
-            self.updated[6] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v6
-        elif index == 7:
-            self.v7 = self.offset[index, 0:2] + self.rotate(v, self.orient[7])
-            self.updated[7] = True
-            if debug == True:
-                print '\n teraranger: ', index, '\t distance: ', v
-                print '\n teraranger: ', index, '\t distance: ', self.v7
+        update_check = v < v_min or v > v_max or np.isnan(v)
+        if (not update_check):
+            v = self.lpfilt[index].update_filter(v)
+            if index == 0:
+                self.v0 = self.offset[0, 0:2] + self.rotate(v, self.orient[0])
+                self.updated[0] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v0
+            elif index == 1:
+                self.v1 = self.offset[index, 0:2] + self.rotate(v, self.orient[1])
+                self.updated[1] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v1
+            elif index == 2:
+                self.v2 = self.offset[index, 0:2] + self.rotate(v, self.orient[2])
+                self.updated[2] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v2
+            elif index == 3:
+                self.v3 = self.offset[index, 0:2] + self.rotate(v, self.orient[3])
+                self.updated[3] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v3
+            elif index == 4:
+                self.v4 = self.offset[index, 0:2] + self.rotate(v, self.orient[4])
+                self.updated[4] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v4
+            elif index == 5:
+                self.v5 = self.offset[index, 0:2] + self.rotate(v, self.orient[5])
+                self.updated[5] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v5
+            elif index == 6:
+                self.v6 = self.offset[index, 0:2] + self.rotate(v, self.orient[6])
+                self.updated[6] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v6
+            elif index == 7:
+                self.v7 = self.offset[index, 0:2] + self.rotate(v, self.orient[7])
+                self.updated[7] = True
+                if debug == True:
+                    print '\n teraranger: ', index, '\t distance: ', v
+                    print '\n teraranger: ', index, '\t distance: ', self.v7
+        else:
+            self.updated[index] = False
 
     def rotate(self, r, angle):
         x = r * np.cos(angle)
@@ -214,8 +248,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'v: ', v
         return v
 
-    def lsqline_pub(self, debug = False):
-        rotm = euler_matrix(self.roll, self.pitch, 0, 'sxyz')
+    def lsqline_pub(self, updated, debug = False):
+        # print 'sum there: ', sum(updated), updated
+        rotm = euler_matrix(self.roll, self.pitch, 0.0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
         A = self.bodyXYZ[0:3, 0:2]
 
@@ -330,7 +365,6 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [-self.v4[1]],
         # [-self.v5[1]]])
 
-        updated = np.copy(self.updated)
         # print updated
         # print 'ranges: ', (self.v0, self.v1, self.v2, self.v3, self.v4, self.v5, self.v6, self.v7)
         A = A[updated, ...] #mask outdated values
@@ -338,14 +372,21 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # print 'A: ', A
         # print 'B: ', B
 
-        self.updated[0] = False
-        self.updated[1] = False
-        self.updated[2] = False
-        self.updated[3] = False
-        self.updated[4] = False
-        self.updated[5] = False
-        self.updated[6] = False
-        self.updated[7] = False
+        # print 'front valids: ', sum([updated[7], updated[0]])
+
+        if (sum([updated[7], updated[0]]) >= 2):
+            A_ = np.array([[v0[0], -1],
+            [v7[0], -1]])
+            B_ = np.array([[-v0[1]],
+            [-v7[1]]])
+            x_ = np.linalg.lstsq(A_,B_)[0]
+
+            alpha_ = np.arctan(x_[0])
+            self.forward = x_[1] * np.cos(alpha_)
+            # print 'forward: ', self.forward, ' alpha: ', alpha_
+            self.errorDx_pub.publish(-abs(self.forward))
+            # self.updated[0] = False
+            # self.updated[7] = False
 
         # At = A.transpose()
         #
@@ -353,7 +394,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # print updated
         if (sum([updated[1], updated[2], updated[5], updated[6]]) >= 4):
 
-            x = np.linalg.lstsq(A,B)[0];
+            x = np.linalg.lstsq(A,B)[0]
 
             alpha = np.arctan(x[0])
             rR = x[1] * np.cos(alpha)
@@ -364,6 +405,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
 
             width = abs(rL) + abs(rR)
             dy = (width/2) - rL
+
             dx = self.forward
 
             if self.debug or debug:
@@ -375,10 +417,18 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
                 #print 'B: \t', B
                 print 'x: \t', x
 
-            self.errorDx_pub.publish(dx)
+            # self.errorDx_pub.publish(dx) #publish this seperately
             self.errorDy_pub.publish(dy)
             self.errorDz_pub.publish(alpha)
             self.resultLSQ_pub.publish(res)
+            # self.updated[0] = False
+            # self.updated[1] = False
+            # self.updated[2] = False
+            # # self.updated[3] = False
+            # # self.updated[4] = False
+            # self.updated[5] = False
+            # self.updated[6] = False
+            # self.updated[7] = False
 
 
 if __name__ == "__main__":

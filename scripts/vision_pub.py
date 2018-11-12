@@ -59,31 +59,32 @@ class VisionPosition:
         self.count = 0
         self.error_updated = [False, False]
         self.descent = False
-        self.z = 0
-        self.fakeX = 0
+        self.z = 0.0
+        self.fakeX = 0.0
         self.fakeY = 0
-        self.spX = 0
+        self.spX = 0.0
         self.spY = 0
         self.rcX = 0
         self.rcY = 0
 
-        self.rcX_trim = 1519
-        self.x_max = 60.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
+        self.rcX_trim = 1489
+        self.x_max = 1.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcX_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingX = self.x_max/self.rcX_max # scaling factor for rcIn to posX
 
-        self.rcY_trim = 1519
+        self.rcY_trim = 1490
         self.y_max = 100.0/100.0 #max x position for UAV to chase. convert from 5cm to metres. x_max is in metres
         self.rcY_max = 500.0 #max range of rc from centre trim of 1500
         self.scalingY = self.y_max/self.rcY_max # scaling factor for rcIn to posX
 
-        self.freq = 10
-        self.lpDx = low_pass.lowpassfilter(self.freq, 0.6)
-        self.lpDy = low_pass.lowpassfilter(self.freq, 0.6)
-
+        self.freq = 20.0
+        # self.lpDx = low_pass.lowpassfilter(1.0/self.freq, 0.01)
+        # self.lpDz = low_pass.lowpassfilter(1.0/self.freq, 0.01)
+        # self.lpDy = low_pass.lowpassfilter(1.0/self.freq, 0.01)
+        self.lpSx = low_pass.lowpassfilter(1.0/self.freq, 3.0)
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.position_callback)
-        rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
+        # rospy.Subscriber("mavros/setpoint_raw/target_local", PositionTarget, self.setpoint_callback)
         rospy.Subscriber("mavros/global_position/global", NavSatFix, self.global_position_callback)
         rospy.Subscriber("mavros/distance_sensor/hrlv_ez4_pub", Range, self.error_lpZ, queue_size=1)
         rospy.Subscriber("mavros/rc/in", RCIn, self.updateRCIn, queue_size=1)
@@ -130,7 +131,8 @@ class VisionPosition:
             pos.header.frame_id = "local_origin"
 
             ## mavros sends pos at ENU
-            pos.pose.position = Point(-self.errorDy, errorDx, self.z)
+            pos.pose.position = Point(-self.errorDy, errorDx + self.spX, self.z)
+            # pos.pose.position = Point(0.0, 0.0, 0.0)
             # pos.pose.position.x = self.errorDy
             # pos.pose.position.y = errorDx
             # pos.pose.position.x = pos.pose.position.x - self.fakeY #to activate slider
@@ -205,29 +207,33 @@ class VisionPosition:
         self.error_updated[0] = True
 
     def error_dx(self, msg):
-        #self.errorDx = msg.data
-        self.errorDx = self.lpDx.update_filter(msg.data)
+        self.errorDx = msg.data
+        # self.errorDx = self.lpDx.update_filter(msg.data)
         self.error_updated[0] = True
 
     def error_dy(self, msg):
-        #self.errorDy = msg.data
-        self.errorDy = self.lpDy.update_filter(msg.data)
+        self.errorDy = msg.data
+        # self.errorDy = self.lpDy.update_filter(msg.data)
         self.error_updated[1] = True
 
     def error_dz(self, msg):
         self.errorDz = msg.data
+        # self.errorDz = self.lpDz.update_filter(msg.data)
 
     def error_lpZ(self, msg):
         self.z = msg.range
 
     def updateRCIn(self, msg):
-        self.rcX = msg.channels[7] - self.rcX_trim
-        tempX = self.rcX * self.scalingX #absolute difference in x from the setpointX
-        self.fakeX = self.spX - tempX # +ve tempX implies
+        self.rcX = msg.channels[5] - self.rcX_trim
+        spX = self.rcX * self.scalingX  # [m] = [pwm] x [m/pwm]
+        spX = -spX
+        self.spX = self.lpSx.update_filter(spX)
+        #absolute difference in x from the setpointX
+        # self.fakeX = self.spX - tempX # +ve tempX implies
         #print self.spX
 
-        self.rcY = msg.channels[5] - self.rcY_trim
-        self.fakeY = self.rcY * self.scalingY #absolute difference in x from the setpointX
+        # self.rcY = msg.channels[5] - self.rcY_trim
+        # self.fakeY = self.rcY * self.scalingY #absolute difference in x from the setpointX
         #print self.spX
 
 
