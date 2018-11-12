@@ -21,7 +21,7 @@ from sensor_msgs.msg import LaserScan
 # simple class to contain the node's variables and code
 
 class TROneNode:     # class constructor; subscribe to topics and advertise intent to publish
-    def __init__(self):
+    def __init__(self, rosbag = True):
         self.v0 = np.array([1,1])
         self.v1 = np.array([1,1])
         self.v2 = np.array([1,1])
@@ -85,7 +85,13 @@ class TROneNode:     # class constructor; subscribe to topics and advertise inte
         # rospy.Subscriber("error_dx", Float32, self.updateXYT, 0, queue_size=1)
         # rospy.Subscriber("error_dy", Float32, self.updateXYT, 1, queue_size=1)
         # rospy.Subscriber("error_dz", Float32, self.updateXYT, 2, queue_size=1)
-        rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updatePose, queue_size=1)
+
+        # local_pose if HITL with UAV
+        if rosbag: # rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updatePose, queue_size=1)
+            rospy.Subscriber("mavros/vision_pose/pose", PoseStamped, self.updatePose, queue_size=1)
+        else: # vision_pose when using rosbag
+            rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updatePose, queue_size=1)
+
         rospy.Subscriber("resultLSQ", Float32MultiArray, self.drawTunnel, queue_size=1)
 
         self.tunnel_pub = rospy.Publisher("tunnel_marker", Marker)
