@@ -15,7 +15,18 @@ from teraranger_array.msg import RangeArray
 # simple class to contain the node's variables and code
 class CentroidFinder:     # class constructor; subscribe to topics and advertise intent to publish
 
-    def __init__(self, v0 = np.array([1,1]), v1 = np.array([-1,-1]), v2 = np.array([1,-1]), v3 = np.array([-1,1]), v4 = np.array([1,0]), v5 = np.array([-1,0]), v6 = np.array([1, 1]), v7 = np.array([1,1]), debug=False ):
+    def __init__(self,
+                v0 = np.array([1,1]),
+                v1 = np.array([-1,-1]),
+                v2 = np.array([1,-1]),
+                v3 = np.array([-1,1]),
+                v4 = np.array([1,0]),
+                v5 = np.array([-1,0]),
+                v6 = np.array([1, 1]),
+                v7 = np.array([1,1]),
+                w = np.array([[100], [0.26], [0.26], [100],
+                            [100], [0.26], [0.26], [100]]),
+                debug=False ):
 
         self.v0 = v0
         self.v1 = v1
@@ -54,6 +65,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [-0.01433, 0.05809, 0],
         [0.03333, 0.05809, 0],
         [0.08565, 0.03456, 0]])
+
+        self.w = w # weights for lsql
 
         self.update_rate = 25.0
 
@@ -336,14 +349,15 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [v5[0]],
         # [v6[0]],
         # [v7[0]]])
-        w = np.array([[100],
-        [0.26],
-        [0.26],
-        [100],
-        [100],
-        [0.26],
-        [0.26],
-        [100]])
+        w = self.w
+        # w = np.array([[100],
+        # [0.26],
+        # [0.26],
+        # [100],
+        # [100],
+        # [0.26],
+        # [0.26],
+        # [100]])
         w = np.exp(-np.square(w))
         # w = np.sqrt(abs(w))
 
