@@ -26,7 +26,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
                 v7 = np.array([1,1]),
                 w = np.array([[0.0], [1.0], [1.0], [0.0], # sensor mask [100] - to deselect; [0] - to select.
                             [0.0], [1.0], [1.0], [0.0]]),
-                lab = False,
+                lab = True,
                 debug=False):
 
         self.v0 = v0
