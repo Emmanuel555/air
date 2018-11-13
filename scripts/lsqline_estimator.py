@@ -15,7 +15,19 @@ from teraranger_array.msg import RangeArray
 # simple class to contain the node's variables and code
 class CentroidFinder:     # class constructor; subscribe to topics and advertise intent to publish
 
-    def __init__(self, v0 = np.array([1,1]), v1 = np.array([-1,-1]), v2 = np.array([1,-1]), v3 = np.array([-1,1]), v4 = np.array([1,0]), v5 = np.array([-1,0]), v6 = np.array([1, 1]), v7 = np.array([1,1]), debug=False ):
+    def __init__(self,
+                v0 = np.array([1,1]), #(rx,ry,r)
+                v1 = np.array([-1,-1]),
+                v2 = np.array([1,-1]),
+                v3 = np.array([-1,1]),
+                v4 = np.array([1,0]),
+                v5 = np.array([-1,0]),
+                v6 = np.array([1, 1]),
+                v7 = np.array([1,1]),
+                w = np.array([[0.0], [1.0], [1.0], [0.0], # sensor mask [100] - to deselect; [0] - to select.
+                            [0.0], [1.0], [1.0], [0.0]]),
+                lab = True,
+                debug=False):
 
         self.v0 = v0
         self.v1 = v1
@@ -29,6 +41,8 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.roll = 0.0
         self.pitch = 0.0
         self.forward = 0.0
+        self.lab = lab
+        self.minPoints = 3
 
         self.M = np.array([[44.80, 142.8, 47.54, 138],
         [45.40, 134.7, 45.19, 131],
@@ -43,7 +57,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.updated = np.array([False, False, False, False, False, False, False, False])
         # FLU
         self.orient = [-np.pi/2 + np.pi/2.25, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi/2 - np.pi/2.25, np.pi/2 + np.pi/2.25, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/2.25]
-        self.remap = [6, 5, 4, 3, 2, 1, 0, 7]
+        self.remap = np.array([6, 5, 4, 3, 2, 1, 0, 7])
         # coordinate system?
         # XYZ - FLU
         self.offset = np.array([[0.08565, -0.03456, 0],
@@ -54,6 +68,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [-0.01433, 0.05809, 0],
         [0.03333, 0.05809, 0],
         [0.08565, 0.03456, 0]])
+
+        self.w = w # sensor mask for lsql
+        self.lamda = 0.045
 
         self.update_rate = 25.0
 
@@ -82,8 +99,6 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # rospy.Subscriber("teraranger4/laser/scan", LaserScan, self.updatePolygonVertex, 3)
         # rospy.Subscriber("teraranger5/laser/scan", LaserScan, self.updatePolygonVertex, 4)
         # rospy.Subscriber("teraranger6/laser/scan", LaserScan, self.updatePolygonVertex, 5)
-
-
 
         rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.updateRPY)
 
@@ -161,7 +176,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             self.updatePolygonVertex_old(v, i)
 
         updated = np.copy(self.updated)
-        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= 4):
+        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= self.minPoints):
             self.publishByValid = True
         # print sum([updated[1], updated[2], updated[5], updated[6]]), self.publishByValid
         self.publishTimeNow = rospy.Time.now()
@@ -171,7 +186,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         if debug:
             print delta.to_sec(), (1.0/self.update_rate)
         if (self.publishByValid and publishByTime):
-            self.lsqline_pub(updated)
+            self.lsqline_pub(updated, ranges)
             self.publishTimeLast = self.publishTimeNow
 
     def updatePolygonVertex_old(self, msg, index, debug=False):
@@ -248,7 +263,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
             print 'v: ', v
         return v
 
-    def lsqline_pub(self, updated, debug = False):
+    def lsqline_pub(self, updated, ranges, debug = False):
         # print 'sum there: ', sum(updated), updated
         rotm = euler_matrix(self.roll, self.pitch, 0.0, 'sxyz')
         #rotm = euler_matrix(np.pi/6, 0, 0, 'sxyz')
@@ -327,25 +342,42 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         [-v6[1]],
         [-v7[1]]])
 
-        #weights
-        # w = np.array([[v0[0]],
-        # [v1[0]],
-        # [v2[0]],
-        # [v3[0]],
-        # [v4[0]],
-        # [v5[0]],
-        # [v6[0]],
-        # [v7[0]]])
-        w = np.array([[100],
-        [0.26],
-        [0.26],
-        [100],
-        [100],
-        [0.26],
-        [0.26],
-        [100]])
+        # weights
+        # step 1: initialise with the inf => 0 weight cus. exp(-inf)=0
+        w = np.array([[np.inf],
+        [np.inf],
+        [np.inf],
+        [np.inf],
+        [np.inf],
+        [np.inf],
+        [np.inf],
+        [np.inf]])
+
+        ranges_tmp = np.array([[ranges[0].range],
+        [ranges[1].range],
+        [ranges[2].range],
+        [ranges[3].range],
+        [ranges[4].range],
+        [ranges[5].range],
+        [ranges[6].range],
+        [ranges[7].range]])
+
+        ranges_tmp = ranges_tmp[self.remap]
+
+        w[updated] = ranges_tmp[updated]
+
+        # step 2: scale it using weight - lamda
+        w = self.lamda * w
+
+        # print 'w_post: ', w
+
+        # - exp of the squared weights
         w = np.exp(-np.square(w))
-        # w = np.sqrt(abs(w))
+
+        # print 'w_post: ', w
+
+        # mask the sensors with 1.0 or 0.0
+        w = self.w * w
 
         # print w
         A = A * w
@@ -365,7 +397,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # [-self.v4[1]],
         # [-self.v5[1]]])
 
-        # print updated
+        # print 'updated: ', updated
         # print 'ranges: ', (self.v0, self.v1, self.v2, self.v3, self.v4, self.v5, self.v6, self.v7)
         A = A[updated, ...] #mask outdated values
         B = B[updated, ...] #mask outdated values
@@ -373,26 +405,26 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         # print 'B: ', B
 
         # print 'front valids: ', sum([updated[7], updated[0]])
+        if (self.lab):
+            if (sum([updated[7], updated[0]]) >= 2):
+                A_ = np.array([[v0[0], -1],
+                [v7[0], -1]])
+                B_ = np.array([[-v0[1]],
+                [-v7[1]]])
+                x_ = np.linalg.lstsq(A_,B_)[0]
 
-        if (sum([updated[7], updated[0]]) >= 2):
-            A_ = np.array([[v0[0], -1],
-            [v7[0], -1]])
-            B_ = np.array([[-v0[1]],
-            [-v7[1]]])
-            x_ = np.linalg.lstsq(A_,B_)[0]
-
-            alpha_ = np.arctan(x_[0])
-            self.forward = x_[1] * np.cos(alpha_)
-            # print 'forward: ', self.forward, ' alpha: ', alpha_
-            self.errorDx_pub.publish(-abs(self.forward))
-            # self.updated[0] = False
-            # self.updated[7] = False
+                alpha_ = np.arctan(x_[0])
+                self.forward = x_[1] * np.cos(alpha_)
+                # print 'forward: ', self.forward, ' alpha: ', alpha_
+                self.errorDx_pub.publish(-abs(self.forward))
+                # self.updated[0] = False
+                # self.updated[7] = False
 
         # At = A.transpose()
         #
         # x = np.dot(np.linalg.inv(np.dot(At, A)), np.dot(At, B))
         # print updated
-        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= 4):
+        if (sum([updated[1], updated[2], updated[5], updated[6]]) >= self.minPoints):
 
             x = np.linalg.lstsq(A,B)[0]
 
@@ -417,7 +449,9 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
                 #print 'B: \t', B
                 print 'x: \t', x
 
-            # self.errorDx_pub.publish(dx) #publish this seperately
+            if (not self.lab):
+                self.errorDx_pub.publish(dx) #publish this seperately if doing lab experiment
+
             self.errorDy_pub.publish(dy)
             self.errorDz_pub.publish(alpha)
             self.resultLSQ_pub.publish(res)
