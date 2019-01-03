@@ -57,7 +57,7 @@ class CentroidFinder:     # class constructor; subscribe to topics and advertise
         self.updated = np.array([False, False, False, False, False, False, False, False])
         # FLU
         self.orient = [-np.pi/2 + np.pi/2.25, -np.pi/2 + np.pi/12, -np.pi/2 - np.pi/12, -np.pi/2 - np.pi/2.25, np.pi/2 + np.pi/2.25, np.pi/2 + np.pi/12, np.pi/2 - np.pi/12, np.pi/2 - np.pi/2.25]
-        self.remap = np.array([6, 5, 4, 3, 2, 1, 0, 7])
+        self.remap = np.array([4, 5, 6, 7, 0, 1, 2, 3])
         # coordinate system?
         # XYZ - FLU
         self.offset = np.array([[0.08565, -0.03456, 0],
